@@ -32,6 +32,18 @@ func (*Prefixer) Default() string {
 	return "e!"
 }
 
+// MsgEvent Handle func will run on every message event.
+type MsgEvent struct {
+}
+
+// Handle will run on a MessageCreate event.
+func (*MsgEvent) Handle(ctx sayori.Context) {
+	if ctx.Message.Author.ID == ctx.Session.State.User.ID {
+		return
+	}
+	ctx.Session.ChannelMessageSend(ctx.Message.ChannelID, "A message was sent in the channel.")
+}
+
 // EchoCmd defines a simple EchoCmd.
 type EchoCmd struct {
 	aliases []string
@@ -87,9 +99,11 @@ func main() {
 	}
 
 	router := sayori.NewSessionRouter(dg, &Prefixer{})
-	router.MessageHandler(&EchoCmd{
+	router.AddCommand(&EchoCmd{
 		aliases: []string{"echo", "e"},
 	}, sayori.NewEventHandlerRule())
+
+	router.AddEvent(&MsgEvent{}, sayori.NewEventHandlerRule())
 
 	err = dg.Open()
 	if err != nil {
