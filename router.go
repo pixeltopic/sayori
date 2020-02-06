@@ -1,10 +1,14 @@
 package sayori
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
+
+// TODO:
+// Test makeCommand and msgEvent by mocking messages (ensure ctx gets populated correctly) and test all other funcs
 
 type (
 	// Args is a set of args bound to identifiers that are parsed from the command
@@ -39,6 +43,22 @@ type (
 	}
 )
 
+// Load loads a key from args
+func (a Args) Load(key string) (interface{}, bool) {
+	v, ok := a[key]
+	return v, ok
+}
+
+// Store stores a key that maps to val in args
+func (a Args) Store(key string, val interface{}) {
+	a[key] = val
+}
+
+// Delete removes a key that maps to val in args, or if key does not exist, no-op
+func (a Args) Delete(key string) {
+	delete(a, key)
+}
+
 // Get retrieves the token matching the index
 func (t Toks) Get(i int) (string, bool) {
 	l := len(t)
@@ -48,19 +68,50 @@ func (t Toks) Get(i int) (string, bool) {
 	return t[i], true
 }
 
-func newToks(command string) Toks {
-	return Toks(strings.Fields(command))
+// newToks returns a slice of tokens split by whitespace
+func newToks(s string) Toks {
+	return Toks(strings.Fields(s))
+}
+
+// defaultFmtRule is the default format function to convert a failing Rule into an error string
+func defaultFmtRule(r Rule) string {
+	return fmt.Sprintf("rule id %d failed", r)
 }
 
 // Context contains data relating to the command invocation context
 type Context struct {
-	Session *discordgo.Session
-	Message *discordgo.Message
-	Prefix  string
-	Alias   string
-	Args    Args
-	Toks    Toks
-	Err     error
+	Rule
+	Session    *discordgo.Session
+	Message    *discordgo.Message
+	Prefix     string
+	Alias      string
+	Args       Args
+	Toks       Toks
+	Err        error
+	FmtRuleErr func(Rule) string // format a rule const into an error string
+}
+
+// ruleToErr converts an error string to a RuleError
+func (c Context) ruleToErr(r Rule) error {
+	return &RuleError{
+		rule:   r,
+		reason: c.FmtRuleErr(r),
+	}
+}
+
+// NewContext returns an unpopulated context with defaults set
+func NewContext() Context {
+	return Context{
+		Rule:       NewRule(),
+		Session:    nil,
+		Message:    nil,
+		Prefix:     "",
+		Alias:      "",
+		Args:       nil,
+		Toks:       nil,
+		Err:        nil,
+		FmtRuleErr: defaultFmtRule,
+	}
 }
 
 // Router maps commands to handlers.
@@ -77,6 +128,7 @@ func New(dg *discordgo.Session, p Prefixer) *Router {
 	}
 }
 
+// getGuildPrefix returns guildID's custom prefix or if none, returns default prefix
 func (r *Router) getGuildPrefix(guildID string) string {
 	prefix, ok := r.p.Load(guildID)
 	if !ok {
@@ -101,60 +153,68 @@ func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// AddHandler calls discordgo.Session.AddHandler
-func (r *Router) AddHandler(handler interface{}) {
-	r.session.AddHandler(handler)
-}
-
 // Has defines a handler in the router which should satisfy Event or Command interface
-func (r *Router) Has(h interface{}, rules EventHandlerRule) {
+//
+// If Rule is nil, will ignore.
+//
+// If `h` does not satisfy `Event` or `Command`, will not consider Rule regardless if nil or not.
+func (r *Router) Has(h interface{}, rule *Rule) {
+	var newHandler interface{}
+
 	switch v := h.(type) {
 	case Command:
-		r.command(v, rules)
+		newHandler = r.makeCommand(v, rule)
 	case Event:
-		r.msgEvent(v, rules)
+		newHandler = r.msgEvent(v, rule)
 	default:
-
+		newHandler = h
 	}
+	r.session.AddHandler(newHandler)
 }
 
-// event registers a MessageCreate event handler that does not require an alias or prefix
-func (r *Router) msgEvent(e Event, rules EventHandlerRule) {
-	r.session.AddHandler(func(s *discordgo.Session, i interface{}) {
-		ctx := Context{
-			Session: r.session,
-		}
-		switch v := i.(type) {
+// msgEvent registers a MessageCreate event handler that does not require an alias or prefix
+func (r *Router) msgEvent(e Event, rule *Rule) func(*discordgo.Session, interface{}) {
+	return func(s *discordgo.Session, i interface{}) {
+
+		switch ev := i.(type) {
 		case *discordgo.MessageCreate:
-			// TODO: parse rules here
+			ctx := NewContext()
+			ctx.Session = s
+			ctx.Message = ev.Message
+			ctx.Toks = newToks(ev.Message.Content)
 
-			ctx.Message = v.Message
-			ctx.Args = nil
-
-			ctx.Err = e.Handle(ctx)
+			if rule != nil {
+				ctx.Rule = *rule
+				if ok, failedRule := rule.allow(ctx); ok {
+					ctx.Err = e.Handle(ctx)
+				} else {
+					ctx.Err = ctx.ruleToErr(failedRule)
+				}
+			} else {
+				ctx.Err = e.Handle(ctx)
+			}
 
 			defer e.Catch(ctx)
 
 		default:
 		}
-	})
+	}
 }
 
-// command registers a command with an optional ruleset argument.
-func (r *Router) command(c Command, rules EventHandlerRule) {
+// makeCommand registers a command with an optional rule argument.
+func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, interface{}) {
 
 	var (
 		prefix, alias, cmd string
 		ok                 bool
 	)
 
-	r.session.AddHandler(func(s *discordgo.Session, i interface{}) {
-		switch v := i.(type) {
+	return func(s *discordgo.Session, i interface{}) {
+		switch ev := i.(type) {
 		case *discordgo.MessageCreate:
-			// TODO: parse ruleset here
 
-			cmd = v.Message.Content
-			prefix = r.getGuildPrefix(v.Message.GuildID)
+			cmd = ev.Message.Content
+			prefix = r.getGuildPrefix(ev.Message.GuildID)
 
 			if cmd, ok = r.trimPrefix(cmd, prefix); !ok {
 				return
@@ -164,13 +224,12 @@ func (r *Router) command(c Command, rules EventHandlerRule) {
 				return
 			}
 
-			ctx := Context{
-				Session: r.session,
-				Alias:   alias,
-				Prefix:  prefix,
-				Message: v.Message,
-				Toks:    newToks(cmd),
-			}
+			ctx := NewContext()
+			ctx.Session = s
+			ctx.Alias = alias
+			ctx.Prefix = prefix
+			ctx.Message = ev.Message
+			ctx.Toks = newToks(cmd)
 
 			args, err := c.Parse(cmd)
 			if err != nil {
@@ -179,11 +238,21 @@ func (r *Router) command(c Command, rules EventHandlerRule) {
 				return
 			}
 			ctx.Args = args
-			ctx.Err = c.Handle(ctx)
+
+			if rule != nil {
+				ctx.Rule = *rule
+				if ok, failedRule := rule.allow(ctx); ok {
+					ctx.Err = c.Handle(ctx)
+				} else {
+					ctx.Err = ctx.ruleToErr(failedRule)
+				}
+			} else {
+				ctx.Err = c.Handle(ctx)
+			}
 
 			defer c.Catch(ctx)
 
 		default:
 		}
-	})
+	}
 }

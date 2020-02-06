@@ -36,10 +36,7 @@ func (c *EchoCmd) Parse(fullcommand string) (sayori.Args, error) {
 
 // Handle handles the echo command
 func (c *EchoCmd) Handle(ctx sayori.Context) error {
-	if ctx.Message.Author.ID == ctx.Session.State.User.ID {
-		return nil
-	}
-	if msg, ok := ctx.Args["to-echo"]; ok {
+	if msg, ok := ctx.Args.Load("to-echo"); ok {
 		ctx.Session.ChannelMessageSend(ctx.Message.ChannelID, "Echoing! "+msg.(string))
 	}
 	return nil
