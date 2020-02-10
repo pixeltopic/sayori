@@ -1,15 +1,16 @@
 package main
 
-// Prefixer loads a prefix
-type Prefixer struct {
-}
+const defaultPrefix = "e!"
 
-// Load returns a prefix based on the serverID
-func (p *Prefixer) Load(serverID string) (string, bool) {
+// Prefixer loads a prefix
+type Prefixer struct{}
+
+// Load returns the Default prefix no matter what the guildID given is.
+func (p *Prefixer) Load(_ string) (string, bool) {
 	return p.Default(), true
 }
 
 // Default returns the default router prefix
 func (*Prefixer) Default() string {
-	return "e!"
+	return defaultPrefix
 }

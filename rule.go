@@ -28,12 +28,12 @@ const (
 )
 
 // NewRule generates an Rule bitset given Rules and performing a bitwise `or` on all of them
-func NewRule(rules ...Rule) Rule {
+func NewRule(rules ...Rule) *Rule {
 	var rule Rule
 	for _, r := range rules {
 		rule = rule | r
 	}
-	return rule
+	return &rule
 }
 
 // HasRule checks if a rule is enabled
@@ -48,7 +48,7 @@ func (e Rule) HasRule(rule Rule) bool {
 // if ctx.Message or ctx.Session is nil, will return false with Rule value of 0
 func (e Rule) allow(ctx Context) (bool, Rule) {
 	if ctx.Message == nil || ctx.Session == nil {
-		return false, NewRule()
+		return false, Rule(0)
 	}
 
 	var (
@@ -74,5 +74,5 @@ func (e Rule) allow(ctx Context) (bool, Rule) {
 	if !e.HasRule(RuleHandleGuildMsgs) && guildIDLen != 0 {
 		return false, RuleHandleGuildMsgs
 	}
-	return true, NewRule()
+	return true, Rule(0)
 }

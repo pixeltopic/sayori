@@ -29,12 +29,12 @@ func main() {
 	}
 
 	router := sayori.New(dg, &Prefixer{})
-	router.Has(&EchoCmd{
-		aliases: []string{"echo", "e"},
-	}, nil)
+	router.Has(&EchoCmd{}, nil)
 
-	onMsgRule := sayori.NewRule(sayori.RuleHandleGuildMsgs, sayori.RuleHandlePrivateMsgs)
-	router.Has(&OnMsg{}, &onMsgRule)
+	router.Will(
+		&OnMsg{},
+		sayori.NewRule(sayori.RuleHandleGuildMsgs, sayori.RuleHandlePrivateMsgs),
+	)
 
 	err = dg.Open()
 	if err != nil {

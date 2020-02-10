@@ -8,36 +8,39 @@ import (
 )
 
 // EchoCmd defines a simple EchoCmd.
-type EchoCmd struct {
-	aliases []string
-}
+type EchoCmd struct{}
 
-// Match returns a matched alias if the bool is true
-func (c *EchoCmd) Match(fullcommand string) (string, bool) {
-	for i := range c.aliases {
-		if strings.HasPrefix(fullcommand, c.aliases[i]) {
-			return c.aliases[i], true
+// Match attempts to find an alias contained within a prefix-less command
+func (c *EchoCmd) Match(cmd string) (string, bool) {
+	for _, alias := range []string{"echo", "e"} {
+		if strings.HasPrefix(cmd, alias) {
+			return alias, true
 		}
 	}
 	return "", false
 }
 
-// Parse returns args found in the command
-func (c *EchoCmd) Parse(fullcommand string) (sayori.Args, error) {
-	sslice := strings.Fields(fullcommand)
-	if len(sslice) < 2 {
+// Parse parses the command tokens and
+// generates a mapping of arguments to keys
+func (c *EchoCmd) Parse(toks sayori.Toks) (sayori.Args, error) {
+	if toks.Len() < 2 {
 		return nil, errors.New("not enough args to echo :(")
 	}
-	return sayori.Args{
-		"alias":   sslice[0],
-		"to-echo": strings.Join(sslice[1:], " "),
-	}, nil
+	alias, _ := toks.Get(0)
+
+	args := sayori.NewArgs()
+
+	args.Store("alias", alias)
+	args.Store("to-echo", strings.Join(toks.Toks[1:], " "))
+
+	return args, nil
 }
 
 // Handle handles the echo command
 func (c *EchoCmd) Handle(ctx sayori.Context) error {
 	if msg, ok := ctx.Args.Load("to-echo"); ok {
-		ctx.Session.ChannelMessageSend(ctx.Message.ChannelID, "Echoing! "+msg.(string))
+		ctx.Session.ChannelMessageSend(
+			ctx.Message.ChannelID, "Echoing! "+msg.(string))
 	}
 	return nil
 }
@@ -45,6 +48,7 @@ func (c *EchoCmd) Handle(ctx sayori.Context) error {
 // Catch handles any errors
 func (c *EchoCmd) Catch(ctx sayori.Context) {
 	if ctx.Err != nil {
-		ctx.Session.ChannelMessageSend(ctx.Message.ChannelID, ctx.Err.Error())
+		ctx.Session.ChannelMessageSend(
+			ctx.Message.ChannelID, ctx.Err.Error())
 	}
 }

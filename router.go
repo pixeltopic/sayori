@@ -15,33 +15,52 @@ type (
 	Args map[string]interface{}
 
 	// Toks are the tokens parsed from the command
-	Toks []string
+	Toks struct {
+		Toks []string
+		Raw  string
+	}
 
-	// Prefixer identifies the prefix based on the serverID.
+	// Prefixer identifies the prefix based on the guildID.
 	Prefixer interface {
-		// Load fetches a prefix that matches the serverID. Return args= (prefix, ok)
-		Load(serverID string) (string, bool)
+		// Load fetches a prefix that matches the guildID.
+		// returns the prefix mapped to the guildID with an `ok` bool.
+		Load(guildID string) (string, bool)
 		// Default returns the default prefix
 		Default() string
+	}
+
+	// Parseable represents an entity that can be parsed.
+	// Required for Command but optional for Event.
+	Parseable interface {
+		// Parse is where Toks will be parsed into Args.
+		// if an error is non-nil, will immediately be handled by `Catch(ctx Context)`
+		Parse(toks Toks) (Args, error)
 	}
 
 	// Command is used to handle a command
 	Command interface {
 		Event
+		Parseable
 
-		// returns a parsed alias and ok bool if an alias was parsed successfully from the fullcommand
-		// accepts a command str but does not include prefix
-		Match(fullcommand string) (string, bool)
-
-		Parse(fullcommand string) (Args, error)
+		// Match is where a prefix-less command will be matched with a given alias.
+		// returns an alias parsed from the command with an `ok` bool.
+		// if false, will immediately terminate the handler execution.
+		Match(cmd string) (string, bool)
 	}
 
 	// Event is an event that does not require a prefix or alias to handle
 	Event interface {
+		// Handle is where a command's business logic should belong.
 		Handle(ctx Context) error
-		Catch(ctx Context) // should handle errors attached in ctx.Err
+		// Catch is where an error in `ctx.Err` should be handled if non-nil.
+		Catch(ctx Context)
 	}
 )
+
+// NewArgs makes a new instance of Args for storing key-argument mappings
+func NewArgs() Args {
+	return make(Args)
+}
 
 // Load loads a key from args
 func (a Args) Load(key string) (interface{}, bool) {
@@ -59,18 +78,29 @@ func (a Args) Delete(key string) {
 	delete(a, key)
 }
 
+// Len returns the amount of tokens found in the command
+func (t Toks) Len() int {
+	return len(t.Toks)
+}
+
 // Get retrieves the token matching the index
 func (t Toks) Get(i int) (string, bool) {
-	l := len(t)
+	if t.Toks == nil {
+		return "", false
+	}
+	l := t.Len()
 	if i >= l || i < 0 {
 		return "", false
 	}
-	return t[i], true
+	return t.Toks[i], true
 }
 
 // newToks returns a slice of tokens split by whitespace
 func newToks(s string) Toks {
-	return Toks(strings.Fields(s))
+	return Toks{
+		Toks: strings.Fields(s),
+		Raw:  s,
+	}
 }
 
 // defaultFmtRule is the default format function to convert a failing Rule into an error string
@@ -102,13 +132,13 @@ func (c Context) ruleToErr(r Rule) error {
 // NewContext returns an unpopulated context with defaults set
 func NewContext() Context {
 	return Context{
-		Rule:       NewRule(),
+		Rule:       Rule(0),
 		Session:    nil,
 		Message:    nil,
 		Prefix:     "",
 		Alias:      "",
 		Args:       nil,
-		Toks:       nil,
+		Toks:       Toks{},
 		Err:        nil,
 		FmtRuleErr: defaultFmtRule,
 	}
@@ -153,6 +183,15 @@ func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 
 }
 
+// Will defines a handler in the router which should satisfy Event or Command interface. Is an alias for Has.
+//
+// If Rule is nil, will ignore.
+//
+// If `h` does not satisfy `Event` or `Command`, will not consider Rule regardless if nil or not.
+func (r *Router) Will(h interface{}, rule *Rule) {
+	r.Has(h, rule)
+}
+
 // Has defines a handler in the router which should satisfy Event or Command interface
 //
 // If Rule is nil, will ignore.
@@ -165,15 +204,15 @@ func (r *Router) Has(h interface{}, rule *Rule) {
 	case Command:
 		newHandler = r.makeCommand(v, rule)
 	case Event:
-		newHandler = r.msgEvent(v, rule)
+		newHandler = r.makeMsgEvent(v, rule)
 	default:
 		newHandler = h
 	}
 	r.session.AddHandler(newHandler)
 }
 
-// msgEvent registers a MessageCreate event handler that does not require an alias or prefix
-func (r *Router) msgEvent(e Event, rule *Rule) func(*discordgo.Session, interface{}) {
+// makeMsgEvent registers a MessageCreate event handler that does not require an alias or prefix
+func (r *Router) makeMsgEvent(e Event, rule *Rule) func(*discordgo.Session, interface{}) {
 	return func(s *discordgo.Session, i interface{}) {
 
 		switch ev := i.(type) {
@@ -182,6 +221,16 @@ func (r *Router) msgEvent(e Event, rule *Rule) func(*discordgo.Session, interfac
 			ctx.Session = s
 			ctx.Message = ev.Message
 			ctx.Toks = newToks(ev.Message.Content)
+
+			if p, ok := e.(Parseable); ok {
+				args, err := p.Parse(ctx.Toks)
+				if err != nil {
+					ctx.Err = err
+					defer e.Catch(ctx)
+					return
+				}
+				ctx.Args = args
+			}
 
 			if rule != nil {
 				ctx.Rule = *rule
@@ -231,7 +280,7 @@ func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, int
 			ctx.Message = ev.Message
 			ctx.Toks = newToks(cmd)
 
-			args, err := c.Parse(cmd)
+			args, err := c.Parse(ctx.Toks)
 			if err != nil {
 				ctx.Err = err
 				defer c.Catch(ctx)
