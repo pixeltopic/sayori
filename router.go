@@ -165,12 +165,19 @@ func (r *Router) getGuildPrefix(guildID string) string {
 }
 
 // trimPrefix accepts a command (with prefix attached) and attempts to return the command without the prefix.
+//
 // if it fails, will return false with an empty string.
+//
 // if prefix is an empty string, will return the command as-is.
+//
+// if command is an empty string and prefix is not empty, will return false.
 func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 	var c string
 	if prefix == "" {
 		return command, true
+	}
+	if command == "" {
+		return command, false
 	}
 	if c = strings.TrimPrefix(command, prefix); c == command {
 		return "", false

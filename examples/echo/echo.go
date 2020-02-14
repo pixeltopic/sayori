@@ -12,7 +12,10 @@ type EchoCmd struct{}
 
 // Match attempts to find an alias contained within a prefix-less command
 func (c *EchoCmd) Match(toks sayori.Toks) (string, bool) {
-	alias, _ := toks.Get(0)
+	alias, ok := toks.Get(0)
+	if !ok {
+		return "", false
+	}
 	alias = strings.ToLower(alias)
 
 	for _, validAlias := range []string{"e", "echo"} {
