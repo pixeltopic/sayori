@@ -11,9 +11,12 @@ import (
 type EchoCmd struct{}
 
 // Match attempts to find an alias contained within a prefix-less command
-func (c *EchoCmd) Match(cmd string) (string, bool) {
-	for _, alias := range []string{"echo", "e"} {
-		if strings.HasPrefix(cmd, alias) {
+func (c *EchoCmd) Match(toks sayori.Toks) (string, bool) {
+	alias, _ := toks.Get(0)
+	alias = strings.ToLower(alias)
+
+	for _, validAlias := range []string{"e", "echo"} {
+		if alias == validAlias { // do not use HasPrefix, or something like `e!ec ho` will pass despite not matching any alias
 			return alias, true
 		}
 	}

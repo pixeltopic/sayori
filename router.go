@@ -7,9 +7,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-// TODO:
-// Test makeCommand and msgEvent by mocking messages (ensure ctx gets populated correctly) and test all other funcs
-
 type (
 	// Args is a set of args bound to identifiers that are parsed from the command
 	Args map[string]interface{}
@@ -45,7 +42,7 @@ type (
 		// Match is where a prefix-less command will be matched with a given alias.
 		// returns an alias parsed from the command with an `ok` bool.
 		// if false, will immediately terminate the handler execution.
-		Match(cmd string) (string, bool)
+		Match(toks Toks) (string, bool)
 	}
 
 	// Event is an event that does not require a prefix or alias to handle
@@ -269,7 +266,8 @@ func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, int
 				return
 			}
 
-			if alias, ok = c.Match(cmd); !ok {
+			toks := newToks(cmd)
+			if alias, ok = c.Match(toks); !ok {
 				return
 			}
 
@@ -278,7 +276,7 @@ func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, int
 			ctx.Alias = alias
 			ctx.Prefix = prefix
 			ctx.Message = ev.Message
-			ctx.Toks = newToks(cmd)
+			ctx.Toks = toks
 
 			args, err := c.Parse(ctx.Toks)
 			if err != nil {
