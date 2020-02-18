@@ -13,7 +13,6 @@ type testOnMsg struct {
 	HandleCallback func(ctx Context) error
 	CatchCallback  func(ctx Context)
 	ParseCallback  func(toks Toks) (Args, error)
-	t              *testing.T
 }
 
 func (m *testOnMsg) Parse(toks Toks) (Args, error) {
@@ -71,11 +70,20 @@ func testEvent(
 		CatchCallback:  catchCallback,
 	}
 
+	switch {
+	case event.ParseCallback == nil:
+		t.Fatal("ParseCallback cannot be nil")
+	case event.HandleCallback == nil:
+		t.Fatal("HandleCallback cannot be nil")
+	case event.CatchCallback == nil:
+		t.Fatal("CatchCallback cannot be nil")
+	}
+
 	r.makeMsgEvent(event, rule)(mockSession, incomingMockMessage)
 }
 
 func TestRouter(t *testing.T) {
-	t.Run("test ctx values", func(t *testing.T) {
+	t.Run("test event handling", func(t *testing.T) {
 		const (
 			testMessage = `The placeholder text, beginning with the line 
 	"Lorem ipsum dolor sit amet, consectetur adipiscing elit", 
