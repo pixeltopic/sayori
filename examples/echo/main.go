@@ -36,13 +36,13 @@ func main() {
 	router := sayori.New(dg, &Prefixer{})
 	router.Has(&EchoCmd{}, nil)
 
-	router.Will(
+	router.Has(
 		&OnMsg{},
 		sayori.NewRule(sayori.RuleHandleGuildMsgs, sayori.RuleHandlePrivateMsgs),
 	)
 
 	// rule is currently ignored for discorgo-specific handlers
-	router.Will(onDelete, nil)
+	router.Has(onDelete, nil)
 
 	err = dg.Open()
 	if err != nil {

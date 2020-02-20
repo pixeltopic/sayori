@@ -7,39 +7,43 @@ import (
 )
 
 type (
-	// Prefixer identifies the prefix based on the guildID.
+	// Prefixer identifies the prefix based on the guildID before a `Command` execution and removes the prefix of the command string if matched.
+	//
+	// `Load` fetches a prefix that matches the `guildID` and returns the prefix mapped to the `guildID` with an `ok` bool.
+	//
+	// `Default` returns the default prefix
 	Prefixer interface {
-		// Load fetches a prefix that matches the guildID.
-		// returns the prefix mapped to the guildID with an `ok` bool.
 		Load(guildID string) (string, bool)
-		// Default returns the default prefix
 		Default() string
 	}
 
-	// Parseable represents an entity that can be parsed.
-	// Required for Command but optional for Event.
+	// Parseable represents an entity that can be parsed. It is implemented by `Command` but optional for `Event`
+	//
+	// `Parse` is where `Toks` will be parsed into `Args`. If an error is non-nil, will immediately be handled by `Catch(ctx Context)`
 	Parseable interface {
-		// Parse is where Toks will be parsed into Args.
-		// if an error is non-nil, will immediately be handled by `Catch(ctx Context)`
 		Parse(toks Toks) (Args, error)
 	}
 
-	// Command is used to handle a command
+	// Command is used to handle a command which will only be run on a `*discordgo.MessageCreate` event.
+	// Encapsulates the implementation of both `Event` and `Parseable`.
+	//
+	// `Match` is where a command with a trimmed prefix will be matched an alias. It returns an alias parsed from the command with an `ok` bool.
+	// If `ok` is false, the Command will immediately be terminated.
 	Command interface {
 		Event
 		Parseable
-
-		// Match is where a prefix-less command will be matched with a given alias.
-		// returns an alias parsed from the command with an `ok` bool.
-		// if false, will immediately terminate the handler execution.
 		Match(toks Toks) (string, bool)
 	}
 
-	// Event is an event that does not require a prefix or alias to handle
+	// Event is used to handle a `*discordgo.MessageCreate` event.
+	// Only contains the core functions required to implement a `Command`, thus does not require a prefix or alias to be parsed.
+	// Can optionally implement `Parseable`, but is not required.
+	//
+	// `Handle` is where a command's business logic should belong.
+	//
+	// `Catch` is where an error in `ctx.Err` should be handled if non-nil.
 	Event interface {
-		// Handle is where a command's business logic should belong.
 		Handle(ctx Context) error
-		// Catch is where an error in `ctx.Err` should be handled if non-nil.
 		Catch(ctx Context)
 	}
 )
@@ -90,15 +94,6 @@ func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Will defines a handler in the router which should satisfy Event or Command interface. Is an alias for Has.
-//
-// If Rule is nil, will ignore.
-//
-// If `h` does not satisfy `Event` or `Command`, will not consider Rule regardless if nil or not.
-func (r *Router) Will(h interface{}, rule *Rule) {
-	r.Has(h, rule)
-}
-
 // Has defines a handler in the router which should satisfy Event or Command interface
 //
 // If Rule is nil, will ignore.
@@ -111,105 +106,98 @@ func (r *Router) Has(h interface{}, rule *Rule) {
 	case Command:
 		newHandler = r.makeCommand(v, rule)
 	case Event:
-		newHandler = r.makeMsgEvent(v, rule)
+		newHandler = r.makeEvent(v, rule)
 	default:
 		newHandler = h
 	}
-	r.session.AddHandler(newHandler)
+	r.addHandler(newHandler)
 }
 
-// makeMsgEvent registers a MessageCreate event handler that does not require an alias or prefix
-func (r *Router) makeMsgEvent(e Event, rule *Rule) func(*discordgo.Session, interface{}) {
-	return func(s *discordgo.Session, i interface{}) {
+func (r *Router) addHandler(h interface{}) {
+	if r.session != nil {
+		r.session.AddHandler(h)
+	}
+}
 
-		switch ev := i.(type) {
-		case *discordgo.MessageCreate:
-			ctx := NewContext()
-			ctx.Session = s
-			ctx.Message = ev.Message
-			ctx.Toks = newToks(ev.Message.Content)
+// makeEvent registers a MessageCreate event handler that does not require an alias or prefix
+func (r *Router) makeEvent(e Event, rule *Rule) func(*discordgo.Session, *discordgo.MessageCreate) {
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		ctx := NewContext()
+		ctx.Session = s
+		ctx.Message = m.Message
+		ctx.Toks = NewToks(m.Message.Content)
 
-			if p, ok := e.(Parseable); ok {
-				args, err := p.Parse(ctx.Toks)
-				if err != nil {
-					ctx.Err = err
-					defer e.Catch(ctx)
-					return
-				}
-				ctx.Args = args
+		if p, ok := e.(Parseable); ok {
+			args, err := p.Parse(ctx.Toks)
+			if err != nil {
+				ctx.Err = err
+				defer e.Catch(ctx)
+				return
 			}
-
-			if rule != nil {
-				ctx.Rule = *rule
-				if ok, failedRule := rule.allow(ctx); ok {
-					ctx.Err = e.Handle(ctx)
-				} else {
-					ctx.Err = ctx.ruleToErr(failedRule)
-				}
-			} else {
-				ctx.Err = e.Handle(ctx)
-			}
-
-			defer e.Catch(ctx)
-
-		default:
+			ctx.Args = args
 		}
+
+		if rule != nil {
+			ctx.Rule = *rule
+			if ok, failedRule := rule.allow(ctx); ok {
+				ctx.Err = e.Handle(ctx)
+			} else {
+				ctx.Err = ctx.ruleToErr(failedRule)
+			}
+		} else {
+			ctx.Err = e.Handle(ctx)
+		}
+
+		defer e.Catch(ctx)
 	}
 }
 
 // makeCommand registers a command with an optional rule argument.
-func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, interface{}) {
-
+func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, *discordgo.MessageCreate) {
 	var (
 		prefix, alias, cmd string
 		ok                 bool
 	)
 
-	return func(s *discordgo.Session, i interface{}) {
-		switch ev := i.(type) {
-		case *discordgo.MessageCreate:
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		cmd = m.Message.Content
+		prefix = r.getGuildPrefix(m.Message.GuildID)
 
-			cmd = ev.Message.Content
-			prefix = r.getGuildPrefix(ev.Message.GuildID)
-
-			if cmd, ok = r.trimPrefix(cmd, prefix); !ok {
-				return
-			}
-
-			toks := newToks(cmd)
-			if alias, ok = c.Match(toks); !ok {
-				return
-			}
-
-			ctx := NewContext()
-			ctx.Session = s
-			ctx.Alias = alias
-			ctx.Prefix = prefix
-			ctx.Message = ev.Message
-			ctx.Toks = toks
-
-			args, err := c.Parse(ctx.Toks)
-			if err != nil {
-				ctx.Err = err
-				defer c.Catch(ctx)
-				return
-			}
-			ctx.Args = args
-
-			if rule != nil {
-				ctx.Rule = *rule
-				if ok, failedRule := rule.allow(ctx); ok {
-					ctx.Err = c.Handle(ctx)
-				} else {
-					ctx.Err = ctx.ruleToErr(failedRule)
-				}
-			} else {
-				ctx.Err = c.Handle(ctx)
-			}
-
-			defer c.Catch(ctx)
-
-		default:
+		if cmd, ok = r.trimPrefix(cmd, prefix); !ok {
+			return
 		}
+
+		toks := NewToks(cmd)
+		if alias, ok = c.Match(toks); !ok {
+			return
+		}
+
+		ctx := NewContext()
+		ctx.Session = s
+		ctx.Alias = alias
+		ctx.Prefix = prefix
+		ctx.Message = m.Message
+		ctx.Toks = toks
+
+		args, err := c.Parse(ctx.Toks)
+		if err != nil {
+			ctx.Err = err
+			defer c.Catch(ctx)
+			return
+		}
+		ctx.Args = args
+
+		if rule != nil {
+			ctx.Rule = *rule
+			if ok, failedRule := rule.allow(ctx); ok {
+				ctx.Err = c.Handle(ctx)
+			} else {
+				ctx.Err = ctx.ruleToErr(failedRule)
+			}
+		} else {
+			ctx.Err = c.Handle(ctx)
+		}
+
+		defer c.Catch(ctx)
 	}
 }
