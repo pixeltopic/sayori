@@ -4,7 +4,12 @@
 
 `sayori` uses no reflection and has no concept of subcommands, forming a 'flat' hierarchy. 
 
-`Command` and `Event` only run on a `MessageCreate`. An `Event` is essentially a `Command` but with less restrictions.
+`Command` and `Event` define interfaces that only run on a `MessageCreate`. 
+An `Event` is essentially a `Command`, but skips prefix and alias matching.
+Parsing arguments in an `Event` is also optional.
+
+If a handler that does not satisfy `Event` and `Command` is added via `Has` or `Will` functions, it will auto-default to `discordgo`'s handler types.
+
 More details on these interfaces are defined in `/router.go`.
 
 To initialize `sayori`, a `Prefixer` must be defined. A `Prefixer` can load a prefix based on `guildID`

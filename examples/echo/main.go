@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,6 +22,10 @@ func init() {
 	flag.Parse()
 }
 
+func onDelete(_ *discordgo.Session, d *discordgo.MessageDelete) {
+	log.Printf("A message was deleted: %v, %v, %v", d.Message.ID, d.Message.ChannelID, d.Message.GuildID)
+}
+
 func main() {
 	dg, err := discordgo.New("Bot " + Token)
 	if err != nil {
@@ -35,6 +40,9 @@ func main() {
 		&OnMsg{},
 		sayori.NewRule(sayori.RuleHandleGuildMsgs, sayori.RuleHandlePrivateMsgs),
 	)
+
+	// rule is currently ignored for discorgo-specific handlers
+	router.Will(onDelete, nil)
 
 	err = dg.Open()
 	if err != nil {
