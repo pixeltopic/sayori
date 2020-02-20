@@ -1,22 +1,12 @@
 package sayori
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 type (
-	// Args is a set of args bound to identifiers that are parsed from the command
-	Args map[string]interface{}
-
-	// Toks are the tokens parsed from the command
-	Toks struct {
-		Toks []string
-		Raw  string
-	}
-
 	// Prefixer identifies the prefix based on the guildID.
 	Prefixer interface {
 		// Load fetches a prefix that matches the guildID.
@@ -53,93 +43,6 @@ type (
 		Catch(ctx Context)
 	}
 )
-
-// NewArgs makes a new instance of Args for storing key-argument mappings
-func NewArgs() Args {
-	return make(Args)
-}
-
-// Load loads a key from args
-func (a Args) Load(key string) (interface{}, bool) {
-	v, ok := a[key]
-	return v, ok
-}
-
-// Store stores a key that maps to val in args
-func (a Args) Store(key string, val interface{}) {
-	a[key] = val
-}
-
-// Delete removes a key that maps to val in args, or if key does not exist, no-op
-func (a Args) Delete(key string) {
-	delete(a, key)
-}
-
-// Len returns the amount of tokens found in the command
-func (t Toks) Len() int {
-	return len(t.Toks)
-}
-
-// Get retrieves the token matching the index
-func (t Toks) Get(i int) (string, bool) {
-	if t.Toks == nil {
-		return "", false
-	}
-	l := t.Len()
-	if i >= l || i < 0 {
-		return "", false
-	}
-	return t.Toks[i], true
-}
-
-// newToks returns a slice of tokens split by whitespace
-func newToks(s string) Toks {
-	return Toks{
-		Toks: strings.Fields(s),
-		Raw:  s,
-	}
-}
-
-// defaultFmtRule is the default format function to convert a failing Rule into an error string
-func defaultFmtRule(r Rule) string {
-	return fmt.Sprintf("rule id %d failed", r)
-}
-
-// Context contains data relating to the command invocation context
-type Context struct {
-	Rule
-	Session    *discordgo.Session
-	Message    *discordgo.Message
-	Prefix     string
-	Alias      string
-	Args       Args
-	Toks       Toks
-	Err        error
-	FmtRuleErr func(Rule) string // format a rule const into an error string
-}
-
-// ruleToErr converts an error string to a RuleError
-func (c Context) ruleToErr(r Rule) error {
-	return &RuleError{
-		rule:   r,
-		reason: c.FmtRuleErr(r),
-	}
-}
-
-// NewContext returns an unpopulated context with defaults set
-func NewContext() Context {
-	return Context{
-		Rule:       Rule(0),
-		Session:    nil,
-		Message:    nil,
-		Prefix:     "",
-		Alias:      "",
-		Args:       nil,
-		Toks:       Toks{},
-		Err:        nil,
-		FmtRuleErr: defaultFmtRule,
-	}
-}
 
 // Router maps commands to handlers.
 type Router struct {
