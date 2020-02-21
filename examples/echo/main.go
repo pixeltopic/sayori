@@ -34,14 +34,13 @@ func main() {
 	}
 
 	router := sayori.New(dg, &Prefixer{})
-	router.Has(&EchoCmd{}, nil)
+	router.Has(router.Command(&EchoCmd{}))
 
-	router.Has(
-		&OnMsg{},
-		sayori.NewRule(sayori.RuleHandleGuildMsgs, sayori.RuleHandlePrivateMsgs),
-	)
+	router.Has(router.Event(&OnMsg{}).
+		WithRule(sayori.RuleHandleGuildMsgs).
+		WithRule(sayori.RuleHandlePrivateMsgs))
 
-	router.HasOnce(onDelete, nil)
+	router.HasOnce(router.HandleDefault(onDelete))
 
 	err = dg.Open()
 	if err != nil {

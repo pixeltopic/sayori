@@ -62,6 +62,26 @@ func New(dg *discordgo.Session, p Prefixer) *Router {
 	}
 }
 
+// Command binds a `Command` implementation to the builder.
+func (r *Router) Command(c Command) *Builder {
+	b := &Builder{}
+	return b.command(c)
+}
+
+// Event binds an `Event` implementation to the builder.
+func (r *Router) Event(e Event) *Builder {
+	b := &Builder{}
+	return b.event(e)
+}
+
+// HandleDefault binds a default discordgo event handler to the builder.
+func (r *Router) HandleDefault(h interface{}) *Builder {
+	b := &Builder{
+		handler: h,
+	}
+	return b
+}
+
 // getGuildPrefix returns guildID's custom prefix or if none, returns default prefix
 func (r *Router) getGuildPrefix(guildID string) string {
 	prefix, ok := r.p.Load(guildID)
@@ -101,16 +121,16 @@ func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 //
 // If `h` does not satisfy `Event` or `Command`, will not consider `Rule` regardless if `nil` or not.
 // In this case, the given `h` will be treated as a discordgo event handler.
-func (r *Router) Has(h interface{}, rule *Rule) {
+func (r *Router) Has(b *Builder) {
 	var newHandler interface{}
 
-	switch v := h.(type) {
+	switch v := b.handler.(type) {
 	case Command:
-		newHandler = r.makeCommand(v, rule)
+		newHandler = r.makeCommand(v, b.rule)
 	case Event:
-		newHandler = r.makeEvent(v, rule)
+		newHandler = r.makeEvent(v, b.rule)
 	default:
-		newHandler = h
+		newHandler = b.handler
 	}
 	r.addHandler(newHandler)
 }
@@ -124,28 +144,28 @@ func (r *Router) Has(h interface{}, rule *Rule) {
 // In this case, the given `h` will be treated as a discordgo event handler.
 //
 // `h` will only fire at most once.
-func (r *Router) HasOnce(h interface{}, rule *Rule) {
+func (r *Router) HasOnce(b *Builder) {
 	var newHandler interface{}
 
-	switch v := h.(type) {
+	switch v := b.handler.(type) {
 	case Command:
-		newHandler = r.makeCommand(v, rule)
+		newHandler = r.makeCommand(v, b.rule)
 	case Event:
-		newHandler = r.makeEvent(v, rule)
+		newHandler = r.makeEvent(v, b.rule)
 	default:
-		newHandler = h
+		newHandler = b.handler
 	}
 	r.addHandlerOnce(newHandler)
 }
 
 func (r *Router) addHandler(h interface{}) {
-	if r.session != nil {
+	if r.session != nil && h != nil {
 		r.session.AddHandler(h)
 	}
 }
 
 func (r *Router) addHandlerOnce(h interface{}) {
-	if r.session != nil {
+	if r.session != nil && h != nil {
 		r.session.AddHandlerOnce(h)
 	}
 }

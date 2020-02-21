@@ -27,7 +27,7 @@ const (
 	RuleHandleGuildMsgs
 )
 
-// NewRule generates an Rule bitset given Rules and performing a bitwise `or` on all of them
+// NewRule generates a Rule bitset given Rules and performing a bitwise `or` on all of them
 func NewRule(rules ...Rule) *Rule {
 	var rule Rule
 	for _, r := range rules {
