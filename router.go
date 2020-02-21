@@ -94,11 +94,13 @@ func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Has defines a handler in the router which should satisfy Event or Command interface
+// Has binds an entity `h` to the router which should implement `Event` or `Command`
+// with an optional `Rule` to control when the handler fires.
 //
-// If Rule is nil, will ignore.
+// If `Rule` is nil, then the `Rule` will not be taken into consideration.
 //
-// If `h` does not satisfy `Event` or `Command`, will not consider Rule regardless if nil or not.
+// If `h` does not satisfy `Event` or `Command`, will not consider `Rule` regardless if `nil` or not.
+// In this case, the given `h` will be treated as a discordgo event handler.
 func (r *Router) Has(h interface{}, rule *Rule) {
 	var newHandler interface{}
 
@@ -113,9 +115,38 @@ func (r *Router) Has(h interface{}, rule *Rule) {
 	r.addHandler(newHandler)
 }
 
+// HasOnce binds an entity `h` to the router which should implement `Event` or `Command`
+// with an optional `Rule` to control when the handler fires.
+//
+// If `Rule` is nil, then the `Rule` will not be taken into consideration.
+//
+// If `h` does not satisfy `Event` or `Command`, will not consider `Rule` regardless if `nil` or not.
+// In this case, the given `h` will be treated as a discordgo event handler.
+//
+// `h` will only fire at most once.
+func (r *Router) HasOnce(h interface{}, rule *Rule) {
+	var newHandler interface{}
+
+	switch v := h.(type) {
+	case Command:
+		newHandler = r.makeCommand(v, rule)
+	case Event:
+		newHandler = r.makeEvent(v, rule)
+	default:
+		newHandler = h
+	}
+	r.addHandlerOnce(newHandler)
+}
+
 func (r *Router) addHandler(h interface{}) {
 	if r.session != nil {
 		r.session.AddHandler(h)
+	}
+}
+
+func (r *Router) addHandlerOnce(h interface{}) {
+	if r.session != nil {
+		r.session.AddHandlerOnce(h)
 	}
 }
 

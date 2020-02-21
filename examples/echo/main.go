@@ -41,8 +41,7 @@ func main() {
 		sayori.NewRule(sayori.RuleHandleGuildMsgs, sayori.RuleHandlePrivateMsgs),
 	)
 
-	// rule is currently ignored for discorgo-specific handlers
-	router.Has(onDelete, nil)
+	router.HasOnce(onDelete, nil)
 
 	err = dg.Open()
 	if err != nil {
