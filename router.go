@@ -126,9 +126,9 @@ func (r *Router) Has(b *Builder) {
 
 	switch v := b.handler.(type) {
 	case Command:
-		newHandler = r.makeCommand(v, b.rule)
+		newHandler = r.makeCommand(v, b.filter)
 	case Event:
-		newHandler = r.makeEvent(v, b.rule)
+		newHandler = r.makeEvent(v, b.filter)
 	default:
 		newHandler = b.handler
 	}
@@ -149,9 +149,9 @@ func (r *Router) HasOnce(b *Builder) {
 
 	switch v := b.handler.(type) {
 	case Command:
-		newHandler = r.makeCommand(v, b.rule)
+		newHandler = r.makeCommand(v, b.filter)
 	case Event:
-		newHandler = r.makeEvent(v, b.rule)
+		newHandler = r.makeEvent(v, b.filter)
 	default:
 		newHandler = b.handler
 	}
@@ -171,7 +171,7 @@ func (r *Router) addHandlerOnce(h interface{}) {
 }
 
 // makeEvent registers a MessageCreate event handler that does not require an alias or prefix
-func (r *Router) makeEvent(e Event, rule *Rule) func(*discordgo.Session, *discordgo.MessageCreate) {
+func (r *Router) makeEvent(e Event, f Filter) func(*discordgo.Session, *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		ctx := NewContext()
 		ctx.Session = s
@@ -188,15 +188,11 @@ func (r *Router) makeEvent(e Event, rule *Rule) func(*discordgo.Session, *discor
 			ctx.Args = args
 		}
 
-		if rule != nil {
-			ctx.Rule = *rule
-			if ok, failedRule := rule.allow(ctx); ok {
-				ctx.Err = e.Handle(ctx)
-			} else {
-				ctx.Err = ctx.ruleToErr(failedRule)
-			}
-		} else {
+		ctx.Filter = f
+		if ok, failedFilters := f.allow(ctx); ok {
 			ctx.Err = e.Handle(ctx)
+		} else {
+			ctx.Err = ctx.filterToErr(failedFilters)
 		}
 
 		defer e.Catch(ctx)
@@ -204,7 +200,7 @@ func (r *Router) makeEvent(e Event, rule *Rule) func(*discordgo.Session, *discor
 }
 
 // makeCommand registers a command with an optional rule argument.
-func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, *discordgo.MessageCreate) {
+func (r *Router) makeCommand(c Command, f Filter) func(*discordgo.Session, *discordgo.MessageCreate) {
 	var (
 		prefix, alias, cmd string
 		ok                 bool
@@ -237,16 +233,12 @@ func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, *di
 			return
 		}
 		ctx.Args = args
+		ctx.Filter = f
 
-		if rule != nil {
-			ctx.Rule = *rule
-			if ok, failedRule := rule.allow(ctx); ok {
-				ctx.Err = c.Handle(ctx)
-			} else {
-				ctx.Err = ctx.ruleToErr(failedRule)
-			}
-		} else {
+		if ok, failedFilters := f.allow(ctx); ok {
 			ctx.Err = c.Handle(ctx)
+		} else {
+			ctx.Err = ctx.filterToErr(failedFilters)
 		}
 
 		defer c.Catch(ctx)

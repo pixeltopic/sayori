@@ -3,7 +3,7 @@ package sayori
 // Builder generates the framework of a command.
 type Builder struct {
 	handler interface{}
-	rule    *Rule
+	filter  Filter
 }
 
 // command binds a `Command` implementation to the builder.
@@ -18,12 +18,8 @@ func (b *Builder) event(e Event) *Builder {
 	return b
 }
 
-// WithRule adds a new Rule to the builder.
-func (b *Builder) WithRule(r Rule) *Builder {
-	if b.rule != nil {
-		b.rule = NewRule(*b.rule, r)
-	} else {
-		b.rule = NewRule(r)
-	}
+// Filter prevents the specified condition from firing the Command or Event
+func (b *Builder) Filter(f Filter) *Builder {
+	b.filter = NewFilter(b.filter, f)
 	return b
 }

@@ -37,8 +37,9 @@ func main() {
 	router.Has(router.Command(&EchoCmd{}))
 
 	router.Has(router.Event(&OnMsg{}).
-		WithRule(sayori.RuleHandleGuildMsgs).
-		WithRule(sayori.RuleHandlePrivateMsgs))
+		Filter(sayori.BotMessages).
+		Filter(sayori.EmptyMessages).
+		Filter(sayori.SelfMessages))
 
 	router.HasOnce(router.HandleDefault(onDelete))
 
