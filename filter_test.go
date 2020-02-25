@@ -86,6 +86,7 @@ func TestFilter(t *testing.T) {
 		var (
 			filter, errFilter Filter
 			ctx               Context
+			ok                bool
 		)
 
 		filter = NewFilter()
@@ -96,6 +97,14 @@ func TestFilter(t *testing.T) {
 		filter = NewFilter(MessagesBot, MessagesEmpty)
 		_, errFilter = filter.allow(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
 		testAllowResult(t, NewFilter(MessagesBot, MessagesEmpty), errFilter)
+
+		// should pass the filter
+		filter = NewFilter(MessagesPrivate)
+		ok, errFilter = filter.allow(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
+		testAllowResult(t, NewFilter(0), errFilter)
+		if !ok {
+			t.Fatal("incorrect Filter; expected true but got false")
+		}
 
 		// Author is nil
 		state := discordgo.NewState()
