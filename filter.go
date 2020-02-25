@@ -21,11 +21,11 @@ func (e *FilterError) Error() string {
 
 // Valid Filters
 const (
-	SelfMessages Filter = 1 << iota
-	BotMessages
-	EmptyMessages
-	PrivateMessages
-	GuildMessages
+	MessagesSelf Filter = 1 << iota
+	MessagesBot
+	MessagesEmpty
+	MessagesPrivate
+	MessagesGuild
 )
 
 // NewFilter generates a Filter bitset given filters and performing a bitwise `or` on all of them
@@ -63,7 +63,7 @@ func (f Filter) allow(ctx Context) (bool, Filter) {
 		guildIDLen = len(ctx.Message.GuildID)
 	)
 
-	if f.filters(SelfMessages) {
+	if f.filters(MessagesSelf) {
 		switch {
 		case ctx.Message.Author == nil:
 			fallthrough
@@ -72,25 +72,25 @@ func (f Filter) allow(ctx Context) (bool, Filter) {
 		case ctx.Session.State.User == nil:
 			return false, Filter(0)
 		case ctx.Message.Author.ID == ctx.Session.State.User.ID:
-			failed = failed | SelfMessages
+			failed = failed | MessagesSelf
 		}
 	}
-	if f.filters(BotMessages) {
+	if f.filters(MessagesBot) {
 		switch {
 		case ctx.Message.Author == nil:
 			return false, Filter(0)
 		case ctx.Message.Author.Bot:
-			failed = failed | BotMessages
+			failed = failed | MessagesBot
 		}
 	}
-	if f.filters(EmptyMessages) && contentLen == 0 {
-		failed = failed | EmptyMessages
+	if f.filters(MessagesEmpty) && contentLen == 0 {
+		failed = failed | MessagesEmpty
 	}
-	if f.filters(PrivateMessages) && guildIDLen == 0 {
-		failed = failed | PrivateMessages
+	if f.filters(MessagesPrivate) && guildIDLen == 0 {
+		failed = failed | MessagesPrivate
 	}
-	if f.filters(GuildMessages) && guildIDLen != 0 {
-		failed = failed | GuildMessages
+	if f.filters(MessagesGuild) && guildIDLen != 0 {
+		failed = failed | MessagesGuild
 	}
 
 	return failed == 0, failed

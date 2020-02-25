@@ -93,9 +93,9 @@ func TestFilter(t *testing.T) {
 		testAllowResult(t, Filter(0), errFilter)
 
 		// filter out bot messages and empty messages
-		filter = NewFilter(BotMessages, EmptyMessages)
+		filter = NewFilter(MessagesBot, MessagesEmpty)
 		_, errFilter = filter.allow(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
-		testAllowResult(t, NewFilter(BotMessages, EmptyMessages), errFilter)
+		testAllowResult(t, NewFilter(MessagesBot, MessagesEmpty), errFilter)
 
 		// Author is nil
 		state := discordgo.NewState()
@@ -104,7 +104,7 @@ func TestFilter(t *testing.T) {
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: state}, &discordgo.Message{Author: nil})
 
-		filter = NewFilter(SelfMessages)
+		filter = NewFilter(MessagesSelf)
 		_, errFilter = filter.allow(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
@@ -112,7 +112,7 @@ func TestFilter(t *testing.T) {
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: nil}, &discordgo.Message{Author: &discordgo.User{}})
 
-		filter = NewFilter(SelfMessages)
+		filter = NewFilter(MessagesSelf)
 		_, errFilter = filter.allow(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
@@ -120,27 +120,27 @@ func TestFilter(t *testing.T) {
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: discordgo.NewState()}, &discordgo.Message{Author: &discordgo.User{}})
 
-		filter = NewFilter(SelfMessages)
+		filter = NewFilter(MessagesSelf)
 		_, errFilter = filter.allow(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
 		// filter out self messages
-		filter = NewFilter(SelfMessages)
+		filter = NewFilter(MessagesSelf)
 		_, errFilter = filter.allow(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
-		testAllowResult(t, NewFilter(SelfMessages), errFilter)
+		testAllowResult(t, NewFilter(MessagesSelf), errFilter)
 
 		// Author in Message is nil
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: discordgo.NewState()}, &discordgo.Message{Author: nil})
 
-		filter = NewFilter(BotMessages)
+		filter = NewFilter(MessagesBot)
 		_, errFilter = filter.allow(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
 		// filter out bot messages
-		filter = NewFilter(BotMessages)
+		filter = NewFilter(MessagesBot)
 		_, errFilter = filter.allow(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
-		testAllowResult(t, NewFilter(BotMessages), errFilter)
+		testAllowResult(t, NewFilter(MessagesBot), errFilter)
 
 	})
 }

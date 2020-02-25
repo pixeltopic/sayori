@@ -114,13 +114,10 @@ func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Has binds an entity `h` to the router which should implement `Event` or `Command`
-// with an optional `Rule` to control when the handler fires.
+// Has binds a `Builder` to the router which should implement `Event` or `Command`
+// with any desired `Filter` to control when the handler fires.
 //
-// If `Rule` is nil, then the `Rule` will not be taken into consideration.
-//
-// If `h` does not satisfy `Event` or `Command`, will not consider `Rule` regardless if `nil` or not.
-// In this case, the given `h` will be treated as a discordgo event handler.
+// `Filter` has consts defined in the package that start with the prefix `Messages*`
 func (r *Router) Has(b *Builder) {
 	var newHandler interface{}
 
@@ -135,15 +132,12 @@ func (r *Router) Has(b *Builder) {
 	r.addHandler(newHandler)
 }
 
-// HasOnce binds an entity `h` to the router which should implement `Event` or `Command`
-// with an optional `Rule` to control when the handler fires.
+// HasOnce binds a `Builder` to the router which should implement `Event` or `Command`
+// with any desired `Filter` to control when the handler fires.
 //
-// If `Rule` is nil, then the `Rule` will not be taken into consideration.
+// `Filter` has consts defined in the package that start with the prefix `Messages*`
 //
-// If `h` does not satisfy `Event` or `Command`, will not consider `Rule` regardless if `nil` or not.
-// In this case, the given `h` will be treated as a discordgo event handler.
-//
-// `h` will only fire at most once.
+// `b` will only fire at most once.
 func (r *Router) HasOnce(b *Builder) {
 	var newHandler interface{}
 
@@ -199,7 +193,7 @@ func (r *Router) makeEvent(e Event, f Filter) func(*discordgo.Session, *discordg
 	}
 }
 
-// makeCommand registers a command with an optional rule argument.
+// makeCommand registers a command
 func (r *Router) makeCommand(c Command, f Filter) func(*discordgo.Session, *discordgo.MessageCreate) {
 	var (
 		prefix, alias, cmd string

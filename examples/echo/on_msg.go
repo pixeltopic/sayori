@@ -31,7 +31,7 @@ func (*OnMsg) Catch(ctx sayori.Context) {
 	}
 	switch e := ctx.Err.(type) {
 	case *sayori.FilterError:
-		if e.Filter().Contains(sayori.SelfMessages) {
+		if e.Filter().Contains(sayori.MessagesSelf) {
 			log.Printf("Filter failed for OnMsg; id:'%d'", e.Filter())
 		} else {
 			ctx.Session.ChannelMessageSend(

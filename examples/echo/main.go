@@ -37,9 +37,9 @@ func main() {
 	router.Has(router.Command(&EchoCmd{}))
 
 	router.Has(router.Event(&OnMsg{}).
-		Filter(sayori.BotMessages).
-		Filter(sayori.EmptyMessages).
-		Filter(sayori.SelfMessages))
+		Filter(sayori.MessagesBot).
+		Filter(sayori.MessagesEmpty).
+		Filter(sayori.MessagesSelf))
 
 	router.HasOnce(router.HandleDefault(onDelete))
 
