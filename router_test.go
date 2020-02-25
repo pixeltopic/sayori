@@ -29,6 +29,16 @@ func (m *testOnMsg) Catch(ctx Context) {
 	m.CatchCallback(ctx)
 }
 
+type testCmd struct {
+	testOnMsg
+	MatchCallback func(toks Toks) (string, bool)
+}
+
+// Match identifies the alias of a command. It can support multiple aliases per command.
+func (m *testCmd) Match(toks Toks) (string, bool) {
+	return m.MatchCallback(toks)
+}
+
 // testMockSession returns a fake discordgo Session with the ID of the session user populated
 func testMockSession(selfUserID string) *discordgo.Session {
 	state := discordgo.NewState()
@@ -42,20 +52,30 @@ func testMockSession(selfUserID string) *discordgo.Session {
 	return session
 }
 
-func testMockMessageCreate(content string) *discordgo.MessageCreate {
-	return &discordgo.MessageCreate{
-		Message: &discordgo.Message{
-			Content: content,
+func testMockMessageCreate(authorID string, authorBot bool, msgGuildID, msgContent string) *discordgo.MessageCreate {
+	message := &discordgo.Message{
+		Author: &discordgo.User{
+			ID:  authorID,
+			Bot: authorBot,
 		},
+		Content: msgContent,
+		GuildID: msgGuildID,
+	}
+
+	return &discordgo.MessageCreate{
+		Message: message,
 	}
 }
 
+// testEvent accepts callbacks that contain tests within and creates an testOnMsg
+// instance and creates the wrapper function that will be run on the targeted event.
+// mock data will be fed into this wrapper function to ensure it is processed in a valid manner.
 func testEvent(
 	t *testing.T,
 	parseCallback func(toks Toks) (Args, error),
 	handleCallback func(ctx Context) error,
 	catchCallback func(ctx Context),
-	rule *Rule,
+	filter Filter,
 	mockSession *discordgo.Session,
 	incomingMockMessage *discordgo.MessageCreate,
 ) {
@@ -79,7 +99,46 @@ func testEvent(
 		t.Fatal("CatchCallback cannot be nil")
 	}
 
-	r.makeMsgEvent(event, rule)(mockSession, incomingMockMessage)
+	r.makeEvent(event, filter)(mockSession, incomingMockMessage)
+}
+
+func testCommand(
+	t *testing.T,
+	parseCallback func(toks Toks) (Args, error),
+	handleCallback func(ctx Context) error,
+	catchCallback func(ctx Context),
+	matchCallback func(toks Toks) (string, bool),
+	filter Filter,
+	mockSession *discordgo.Session,
+	incomingMockMessage *discordgo.MessageCreate,
+) {
+	r := &Router{
+		session: mockSession,
+		p:       nil,
+	}
+
+	cmd := &testCmd{
+		testOnMsg: testOnMsg{
+			ParseCallback:  parseCallback,
+			HandleCallback: handleCallback,
+			CatchCallback:  catchCallback,
+		},
+		MatchCallback: matchCallback,
+	}
+
+	switch {
+	case cmd.ParseCallback == nil:
+		t.Fatal("ParseCallback cannot be nil")
+	case cmd.HandleCallback == nil:
+		t.Fatal("HandleCallback cannot be nil")
+	case cmd.CatchCallback == nil:
+		t.Fatal("CatchCallback cannot be nil")
+	case cmd.MatchCallback == nil:
+		t.Fatal("MatchCallback cannot be nil")
+	}
+
+	r.makeCommand(cmd, filter)(mockSession, incomingMockMessage)
+
 }
 
 func TestRouter(t *testing.T) {
@@ -92,7 +151,8 @@ func TestRouter(t *testing.T) {
 		)
 
 		mockSession := testMockSession(sessionID)
-		mockMessageCreate := testMockMessageCreate(testMessage)
+		mockMessageCreate := testMockMessageCreate(
+			"fakeauthorID", false, "someguildID", testMessage)
 
 		parseCallback := func(toks Toks) (Args, error) {
 			args := NewArgs()
@@ -128,6 +188,10 @@ func TestRouter(t *testing.T) {
 		}
 
 		testEvent(
-			t, parseCallback, handleCallback, catchCallback, nil, mockSession, mockMessageCreate)
+			t, parseCallback, handleCallback, catchCallback, NewFilter(), mockSession, mockMessageCreate)
+	})
+
+	t.Run("test command handling", func(t *testing.T) {
+
 	})
 }

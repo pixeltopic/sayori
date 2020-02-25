@@ -59,18 +59,29 @@ func (f Filter) allow(ctx Context) (bool, Filter) {
 	}
 
 	var (
-		msgAuthorID = ctx.Message.Author.ID
-		selfUserID  = ctx.Session.State.User.ID
-		authorIsBot = ctx.Message.Author.Bot
-		contentLen  = len(ctx.Message.Content)
-		guildIDLen  = len(ctx.Message.GuildID)
+		contentLen = len(ctx.Message.Content)
+		guildIDLen = len(ctx.Message.GuildID)
 	)
 
-	if f.filters(SelfMessages) && msgAuthorID == selfUserID {
-		failed = failed | SelfMessages
+	if f.filters(SelfMessages) {
+		switch {
+		case ctx.Message.Author == nil:
+			fallthrough
+		case ctx.Session.State == nil:
+			fallthrough
+		case ctx.Session.State.User == nil:
+			return false, Filter(0)
+		case ctx.Message.Author.ID == ctx.Session.State.User.ID:
+			failed = failed | SelfMessages
+		}
 	}
-	if f.filters(BotMessages) && authorIsBot {
-		failed = failed | BotMessages
+	if f.filters(BotMessages) {
+		switch {
+		case ctx.Message.Author == nil:
+			return false, Filter(0)
+		case ctx.Message.Author.Bot:
+			failed = failed | BotMessages
+		}
 	}
 	if f.filters(EmptyMessages) && contentLen == 0 {
 		failed = failed | EmptyMessages
