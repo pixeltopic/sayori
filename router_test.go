@@ -2,12 +2,23 @@ package sayori
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 const sessionID = "myid"
+
+type testPrefixer struct{}
+
+func (*testPrefixer) Load(_ string) (string, bool) {
+	return "", true
+}
+
+func (*testPrefixer) Default() string {
+	return ""
+}
 
 type testOnMsg struct {
 	HandleCallback func(ctx Context) error
@@ -104,6 +115,7 @@ func testEvent(
 
 func testCommand(
 	t *testing.T,
+	prefixer Prefixer,
 	parseCallback func(toks Toks) (Args, error),
 	handleCallback func(ctx Context) error,
 	catchCallback func(ctx Context),
@@ -114,7 +126,7 @@ func testCommand(
 ) {
 	r := &Router{
 		session: mockSession,
-		p:       nil,
+		p:       prefixer,
 	}
 
 	cmd := &testCmd{
@@ -192,6 +204,65 @@ func TestRouter(t *testing.T) {
 	})
 
 	t.Run("test command handling", func(t *testing.T) {
+		const (
+			testMessage    = `myaliasEcho echo me please! This is a friendly message :)`
+			testMessageLen = len(testMessage)
+		)
+
+		mockSession := testMockSession(sessionID)
+		mockMessageCreate := testMockMessageCreate(
+			"fakeauthorID", false, "someguildID", testMessage)
+
+		parseCallback := func(toks Toks) (Args, error) {
+			args := NewArgs()
+			args.Store("len", testMessageLen)
+			return args, nil
+		}
+
+		handleCallback := func(ctx Context) error {
+			if ctx.Message.Content != testMessage {
+				t.Errorf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
+			}
+			if ctx.Args == nil {
+				t.Error("ctx.Args is nil")
+			} else {
+				val, ok := ctx.Args.Load("len")
+				if !ok {
+					t.Error("ctx.Args[len] does not exist")
+				}
+
+				stored, _ := val.(int)
+				if stored != testMessageLen {
+					t.Errorf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
+				}
+			}
+
+			return errors.New("its a failure oh no")
+		}
+
+		catchCallback := func(ctx Context) {
+			if ctx.Err == nil {
+				t.Errorf("expected ctx.Err to equal '%s', got '%s'", "its a failure oh no", "nil")
+			}
+		}
+
+		matchCallback := func(toks Toks) (string, bool) {
+			if alias, ok := toks.Get(0); ok {
+				isMatch := strings.ToLower(alias) == "myaliasecho"
+				if !isMatch {
+					t.Fatalf("expected alias to be %s, got %s", "myaliasecho", strings.ToLower(alias))
+				}
+
+				return "myaliasecho", isMatch
+			}
+
+			t.Fatal("expected alias to be found in toks")
+			return "", false
+		}
+
+		testCommand(
+			t, &testPrefixer{}, parseCallback, handleCallback,
+			catchCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate)
 
 	})
 }
