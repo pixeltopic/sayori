@@ -158,11 +158,13 @@ func TestRouter(t *testing.T) {
 	"Lorem ipsum dolor sit amet, consectetur adipiscing elit", 
 	looks like Latin because in its youth, centuries ago, it was Latin.`
 			testMessageLen = len(testMessage)
+			sessionID      = "myID"
+			authorID       = "fakeauthorID"
+			guildID        = "someguildID"
 		)
 
-		mockSession := testMockSession("myid")
-		mockMessageCreate := testMockMessageCreate(
-			"fakeauthorID", false, "someguildID", testMessage)
+		mockSession := testMockSession(sessionID)
+		mockMessageCreate := testMockMessageCreate(authorID, false, guildID, testMessage)
 
 		parseCallback := func(toks Toks) (Args, error) {
 			args := NewArgs()
@@ -172,20 +174,19 @@ func TestRouter(t *testing.T) {
 
 		handleCallback := func(ctx Context) error {
 			if ctx.Message.Content != testMessage {
-				t.Errorf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
+				t.Fatalf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
 			}
 			if ctx.Args == nil {
-				t.Error("ctx.Args is nil")
-			} else {
-				val, ok := ctx.Args.Load("len")
-				if !ok {
-					t.Error("ctx.Args[len] does not exist")
-				}
+				t.Fatal("ctx.Args is nil")
+			}
+			val, ok := ctx.Args.Load("len")
+			if !ok {
+				t.Fatal("ctx.Args[len] does not exist")
+			}
 
-				stored, _ := val.(int)
-				if stored != testMessageLen {
-					t.Errorf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
-				}
+			stored, _ := val.(int)
+			if stored != testMessageLen {
+				t.Fatalf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
 			}
 
 			return errors.New("its a failure oh no")
@@ -193,7 +194,7 @@ func TestRouter(t *testing.T) {
 
 		catchCallback := func(ctx Context) {
 			if ctx.Err == nil {
-				t.Errorf("expected ctx.Err to equal '%s', got '%s'", "its a failure oh no", "nil")
+				t.Fatalf("expected ctx.Err to be non-nil")
 			}
 		}
 
@@ -205,11 +206,14 @@ func TestRouter(t *testing.T) {
 		const (
 			testMessage    = `myaliasEcho echo me please! This is a friendly message :)`
 			testMessageLen = len(testMessage)
+			sessionID      = "myID"
+			authorID       = "fakeauthorID"
+			guildID        = "someguildID"
 		)
 
-		mockSession := testMockSession("myid")
+		mockSession := testMockSession(sessionID)
 		mockMessageCreate := testMockMessageCreate(
-			"fakeauthorID", false, "someguildID", testMessage)
+			authorID, false, guildID, testMessage)
 
 		parseCallback := func(toks Toks) (Args, error) {
 			args := NewArgs()
@@ -219,24 +223,23 @@ func TestRouter(t *testing.T) {
 
 		handleCallback := func(ctx Context) error {
 			if ctx.Message.Content != testMessage {
-				t.Errorf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
+				t.Fatalf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
 			}
 			if ctx.Args == nil {
-				t.Error("ctx.Args is nil")
-			} else {
-				val, ok := ctx.Args.Load("len")
-				if !ok {
-					t.Error("ctx.Args[len] does not exist")
-				}
+				t.Fatal("ctx.Args is nil")
+			}
+			val, ok := ctx.Args.Load("len")
+			if !ok {
+				t.Fatal("ctx.Args[len] does not exist")
+			}
 
-				stored, _ := val.(int)
-				if stored != testMessageLen {
-					t.Errorf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
-				}
+			stored, _ := val.(int)
+			if stored != testMessageLen {
+				t.Fatalf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
 			}
 
 			if ctx.Alias != "myaliasecho" {
-				t.Errorf("expected ctx.Alias to equal %s, got %s", "myaliasecho", ctx.Alias)
+				t.Fatalf("expected ctx.Alias to equal %s, got %s", "myaliasecho", ctx.Alias)
 			}
 
 			return errors.New("its a failure oh no")
@@ -244,7 +247,7 @@ func TestRouter(t *testing.T) {
 
 		catchCallback := func(ctx Context) {
 			if ctx.Err == nil {
-				t.Errorf("expected ctx.Err to equal '%s', got '%s'", "its a failure oh no", "nil")
+				t.Fatalf("expected ctx.Err to be non-nil")
 			}
 		}
 
@@ -274,11 +277,13 @@ func TestRouter(t *testing.T) {
 			testMessage    = `myaliasEcho echo me please! This is a friendly message :)`
 			testMessageLen = len(testMessage)
 			alias          = "myaliasEcho"
+			sessionID      = "fakeauthorID"
+			authorID       = sessionID
+			guildID        = "someguildID"
 		)
 
-		mockSession := testMockSession("fakeauthorID")
-		mockMessageCreate := testMockMessageCreate(
-			"fakeauthorID", true, "someguildID", testMessage)
+		mockSession := testMockSession(sessionID)
+		mockMessageCreate := testMockMessageCreate(authorID, true, guildID, testMessage)
 
 		parseCallback := func(toks Toks) (Args, error) {
 			args := NewArgs()
@@ -288,38 +293,42 @@ func TestRouter(t *testing.T) {
 
 		handleCallback := func(ctx Context) error {
 			t.Fatal("expected given handleCallback to never execute due to failed filters")
-			return errors.New("oof")
+			return nil
 		}
 
 		catchCallback := func(ctx Context) {
+			// test ctx.Args
 			if ctx.Args == nil {
-				t.Error("ctx.Args is nil")
-			} else {
-				val, ok := ctx.Args.Load("len")
-				if !ok {
-					t.Fatal("ctx.Args[len] does not exist")
-				}
-
-				stored, _ := val.(int)
-				if stored != testMessageLen {
-					t.Errorf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
-				}
+				t.Fatal("ctx.Args is nil")
 			}
+			val, ok := ctx.Args.Load("len")
+			if !ok {
+				t.Fatal("ctx.Args[len] does not exist")
+			}
+			stored, _ := val.(int)
+			if stored != testMessageLen {
+				t.Fatalf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
+			}
+
+			// test ctx.Alias
 			if ctx.Alias != alias {
-				t.Errorf("expected ctx.Alias to equal %s, got %s", alias, ctx.Alias)
+				t.Fatalf("expected ctx.Alias to equal %s, got %s", alias, ctx.Alias)
 			}
-			if ctx.Err == nil {
-				t.Errorf("expected ctx.Err to equal '%s', got '%s'", "its a failure oh no", "nil")
-			} else {
-				filterErr, ok := ctx.Err.(*FilterError)
-				if !ok {
-					t.Fatal("expected filterErr to implement FilterError")
-				}
 
-				if filterErr.Filter() != NewFilter(MessagesGuild, MessagesSelf) {
-					t.Error("incorrect filter failure code")
-				}
+			// test ctx.Err for the proper Filter error
+			if ctx.Err == nil {
+				t.Fatal("expected ctx.Err to be non-nil")
 			}
+			filterErr, ok := ctx.Err.(*FilterError)
+			if !ok {
+				t.Fatal("expected filterErr to implement FilterError")
+			}
+
+			if filterErr.Filter() != NewFilter(MessagesGuild, MessagesSelf) {
+				t.Fatalf("incorrect filter failure code; expected %d but got %d",
+					NewFilter(MessagesGuild, MessagesSelf), filterErr.Filter())
+			}
+
 		}
 
 		matchCallback := func(toks Toks) (string, bool) {
