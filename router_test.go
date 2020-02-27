@@ -316,7 +316,7 @@ func TestRouter(t *testing.T) {
 					t.Fatal("expected filterErr to implement FilterError")
 				}
 
-				if filterErr.Filter() != NewFilter(MessagesBot, MessagesGuild, MessagesSelf) {
+				if filterErr.Filter() != NewFilter(MessagesGuild, MessagesSelf) {
 					t.Error("incorrect filter failure code")
 				}
 			}
@@ -328,7 +328,7 @@ func TestRouter(t *testing.T) {
 
 		testCommand(
 			t, &testPrefixer{}, parseCallback, handleCallback,
-			catchCallback, matchCallback, NewFilter(MessagesGuild, MessagesBot, MessagesSelf), mockSession, mockMessageCreate)
+			catchCallback, matchCallback, NewFilter(MessagesGuild, MessagesSelf), mockSession, mockMessageCreate)
 
 	})
 }
