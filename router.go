@@ -1,145 +1,52 @@
 package sayori
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 type (
-	// Args is a set of args bound to identifiers that are parsed from the command
-	Args map[string]interface{}
-
-	// Toks are the tokens parsed from the command
-	Toks struct {
-		Toks []string
-		Raw  string
-	}
-
-	// Prefixer identifies the prefix based on the guildID.
+	// Prefixer identifies the prefix based on the guildID before a `Command` execution and removes the prefix of the command string if matched.
+	//
+	// `Load` fetches a prefix that matches the `guildID` and returns the prefix mapped to the `guildID` with an `ok` bool.
+	//
+	// `Default` returns the default prefix
 	Prefixer interface {
-		// Load fetches a prefix that matches the guildID.
-		// returns the prefix mapped to the guildID with an `ok` bool.
 		Load(guildID string) (string, bool)
-		// Default returns the default prefix
 		Default() string
 	}
 
-	// Parseable represents an entity that can be parsed.
-	// Required for Command but optional for Event.
+	// Parseable represents an entity that can be parsed. It is implemented by `Command` but optional for `Event`
+	//
+	// `Parse` is where `Toks` will be parsed into `Args`. If an error is non-nil, will immediately be handled by `Catch(ctx Context)`
 	Parseable interface {
-		// Parse is where Toks will be parsed into Args.
-		// if an error is non-nil, will immediately be handled by `Catch(ctx Context)`
 		Parse(toks Toks) (Args, error)
 	}
 
-	// Command is used to handle a command
+	// Command is used to handle a command which will only be run on a `*discordgo.MessageCreate` event.
+	// Encapsulates the implementation of both `Event` and `Parseable`.
+	//
+	// `Match` is where a command with a trimmed prefix will be matched an alias. It returns an alias parsed from the command with an `ok` bool.
+	// If `ok` is false, the Command will immediately be terminated.
 	Command interface {
 		Event
 		Parseable
-
-		// Match is where a prefix-less command will be matched with a given alias.
-		// returns an alias parsed from the command with an `ok` bool.
-		// if false, will immediately terminate the handler execution.
 		Match(toks Toks) (string, bool)
 	}
 
-	// Event is an event that does not require a prefix or alias to handle
+	// Event is used to handle a `*discordgo.MessageCreate` event.
+	// Only contains the core functions required to implement a `Command`, thus does not require a prefix or alias to be parsed.
+	// Can optionally implement `Parseable`, but is not required.
+	//
+	// `Handle` is where a command's business logic should belong.
+	//
+	// `Catch` is where an error in `ctx.Err` should be handled if non-nil.
 	Event interface {
-		// Handle is where a command's business logic should belong.
 		Handle(ctx Context) error
-		// Catch is where an error in `ctx.Err` should be handled if non-nil.
 		Catch(ctx Context)
 	}
 )
-
-// NewArgs makes a new instance of Args for storing key-argument mappings
-func NewArgs() Args {
-	return make(Args)
-}
-
-// Load loads a key from args
-func (a Args) Load(key string) (interface{}, bool) {
-	v, ok := a[key]
-	return v, ok
-}
-
-// Store stores a key that maps to val in args
-func (a Args) Store(key string, val interface{}) {
-	a[key] = val
-}
-
-// Delete removes a key that maps to val in args, or if key does not exist, no-op
-func (a Args) Delete(key string) {
-	delete(a, key)
-}
-
-// Len returns the amount of tokens found in the command
-func (t Toks) Len() int {
-	return len(t.Toks)
-}
-
-// Get retrieves the token matching the index
-func (t Toks) Get(i int) (string, bool) {
-	if t.Toks == nil {
-		return "", false
-	}
-	l := t.Len()
-	if i >= l || i < 0 {
-		return "", false
-	}
-	return t.Toks[i], true
-}
-
-// newToks returns a slice of tokens split by whitespace
-func newToks(s string) Toks {
-	return Toks{
-		Toks: strings.Fields(s),
-		Raw:  s,
-	}
-}
-
-// defaultFmtRule is the default format function to convert a failing Rule into an error string
-func defaultFmtRule(r Rule) string {
-	return fmt.Sprintf("rule id %d failed", r)
-}
-
-// Context contains data relating to the command invocation context
-type Context struct {
-	Rule
-	Session    *discordgo.Session
-	Message    *discordgo.Message
-	Prefix     string
-	Alias      string
-	Args       Args
-	Toks       Toks
-	Err        error
-	FmtRuleErr func(Rule) string // format a rule const into an error string
-}
-
-// ruleToErr converts an error string to a RuleError
-func (c Context) ruleToErr(r Rule) error {
-	return &RuleError{
-		rule:   r,
-		reason: c.FmtRuleErr(r),
-	}
-}
-
-// NewContext returns an unpopulated context with defaults set
-func NewContext() Context {
-	return Context{
-		Rule:       Rule(0),
-		Session:    nil,
-		Message:    nil,
-		Prefix:     "",
-		Alias:      "",
-		Args:       nil,
-		Toks:       Toks{},
-		Err:        nil,
-		FmtRuleErr: defaultFmtRule,
-	}
-}
 
 // Router maps commands to handlers.
 type Router struct {
@@ -153,6 +60,26 @@ func New(dg *discordgo.Session, p Prefixer) *Router {
 		session: dg,
 		p:       p,
 	}
+}
+
+// Command binds a `Command` implementation to the builder.
+func (r *Router) Command(c Command) *Builder {
+	b := &Builder{}
+	return b.command(c)
+}
+
+// Event binds an `Event` implementation to the builder.
+func (r *Router) Event(e Event) *Builder {
+	b := &Builder{}
+	return b.event(e)
+}
+
+// HandleDefault binds a default discordgo event handler to the builder.
+func (r *Router) HandleDefault(h interface{}) *Builder {
+	b := &Builder{
+		handler: h,
+	}
+	return b
 }
 
 // getGuildPrefix returns guildID's custom prefix or if none, returns default prefix
@@ -187,126 +114,127 @@ func (r *Router) trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Will defines a handler in the router which should satisfy Event or Command interface. Is an alias for Has.
+// Has binds a `Builder` to the router which should implement `Event` or `Command`
+// with any desired `Filter` to control when the handler fires.
 //
-// If Rule is nil, will ignore.
-//
-// If `h` does not satisfy `Event` or `Command`, will not consider Rule regardless if nil or not.
-func (r *Router) Will(h interface{}, rule *Rule) {
-	r.Has(h, rule)
-}
-
-// Has defines a handler in the router which should satisfy Event or Command interface
-//
-// If Rule is nil, will ignore.
-//
-// If `h` does not satisfy `Event` or `Command`, will not consider Rule regardless if nil or not.
-func (r *Router) Has(h interface{}, rule *Rule) {
+// `Filter` has consts defined in the package that start with the prefix `Messages*`
+func (r *Router) Has(b *Builder) {
 	var newHandler interface{}
 
-	switch v := h.(type) {
+	switch v := b.handler.(type) {
 	case Command:
-		newHandler = r.makeCommand(v, rule)
+		newHandler = r.makeCommand(v, b.filter)
 	case Event:
-		newHandler = r.makeMsgEvent(v, rule)
+		newHandler = r.makeEvent(v, b.filter)
 	default:
-		newHandler = h
+		newHandler = b.handler
 	}
-	r.session.AddHandler(newHandler)
+	r.addHandler(newHandler)
 }
 
-// makeMsgEvent registers a MessageCreate event handler that does not require an alias or prefix
-func (r *Router) makeMsgEvent(e Event, rule *Rule) func(*discordgo.Session, interface{}) {
-	return func(s *discordgo.Session, i interface{}) {
+// HasOnce binds a `Builder` to the router which should implement `Event` or `Command`
+// with any desired `Filter` to control when the handler fires.
+//
+// `Filter` has consts defined in the package that start with the prefix `Messages*`
+//
+// `b` will only fire at most once.
+func (r *Router) HasOnce(b *Builder) {
+	var newHandler interface{}
 
-		switch ev := i.(type) {
-		case *discordgo.MessageCreate:
-			ctx := NewContext()
-			ctx.Session = s
-			ctx.Message = ev.Message
-			ctx.Toks = newToks(ev.Message.Content)
+	switch v := b.handler.(type) {
+	case Command:
+		newHandler = r.makeCommand(v, b.filter)
+	case Event:
+		newHandler = r.makeEvent(v, b.filter)
+	default:
+		newHandler = b.handler
+	}
+	r.addHandlerOnce(newHandler)
+}
 
-			if p, ok := e.(Parseable); ok {
-				args, err := p.Parse(ctx.Toks)
-				if err != nil {
-					ctx.Err = err
-					defer e.Catch(ctx)
-					return
-				}
-				ctx.Args = args
+func (r *Router) addHandler(h interface{}) {
+	if r.session != nil && h != nil {
+		r.session.AddHandler(h)
+	}
+}
+
+func (r *Router) addHandlerOnce(h interface{}) {
+	if r.session != nil && h != nil {
+		r.session.AddHandlerOnce(h)
+	}
+}
+
+// makeEvent registers a MessageCreate event handler that does not require an alias or prefix
+func (r *Router) makeEvent(e Event, f Filter) func(*discordgo.Session, *discordgo.MessageCreate) {
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		ctx := NewContext()
+		ctx.Session = s
+		ctx.Message = m.Message
+		ctx.Toks = NewToks(m.Message.Content)
+
+		if p, ok := e.(Parseable); ok {
+			args, err := p.Parse(ctx.Toks)
+			if err != nil {
+				ctx.Err = err
+				defer e.Catch(ctx)
+				return
 			}
-
-			if rule != nil {
-				ctx.Rule = *rule
-				if ok, failedRule := rule.allow(ctx); ok {
-					ctx.Err = e.Handle(ctx)
-				} else {
-					ctx.Err = ctx.ruleToErr(failedRule)
-				}
-			} else {
-				ctx.Err = e.Handle(ctx)
-			}
-
-			defer e.Catch(ctx)
-
-		default:
+			ctx.Args = args
 		}
+
+		ctx.Filter = f
+		if ok, failedFilters := f.allow(ctx); ok {
+			ctx.Err = e.Handle(ctx)
+		} else {
+			ctx.Err = ctx.filterToErr(failedFilters)
+		}
+
+		defer e.Catch(ctx)
 	}
 }
 
-// makeCommand registers a command with an optional rule argument.
-func (r *Router) makeCommand(c Command, rule *Rule) func(*discordgo.Session, interface{}) {
-
+// makeCommand registers a command
+func (r *Router) makeCommand(c Command, f Filter) func(*discordgo.Session, *discordgo.MessageCreate) {
 	var (
 		prefix, alias, cmd string
 		ok                 bool
 	)
 
-	return func(s *discordgo.Session, i interface{}) {
-		switch ev := i.(type) {
-		case *discordgo.MessageCreate:
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		cmd = m.Message.Content
+		prefix = r.getGuildPrefix(m.Message.GuildID)
 
-			cmd = ev.Message.Content
-			prefix = r.getGuildPrefix(ev.Message.GuildID)
-
-			if cmd, ok = r.trimPrefix(cmd, prefix); !ok {
-				return
-			}
-
-			toks := newToks(cmd)
-			if alias, ok = c.Match(toks); !ok {
-				return
-			}
-
-			ctx := NewContext()
-			ctx.Session = s
-			ctx.Alias = alias
-			ctx.Prefix = prefix
-			ctx.Message = ev.Message
-			ctx.Toks = toks
-
-			args, err := c.Parse(ctx.Toks)
-			if err != nil {
-				ctx.Err = err
-				defer c.Catch(ctx)
-				return
-			}
-			ctx.Args = args
-
-			if rule != nil {
-				ctx.Rule = *rule
-				if ok, failedRule := rule.allow(ctx); ok {
-					ctx.Err = c.Handle(ctx)
-				} else {
-					ctx.Err = ctx.ruleToErr(failedRule)
-				}
-			} else {
-				ctx.Err = c.Handle(ctx)
-			}
-
-			defer c.Catch(ctx)
-
-		default:
+		if cmd, ok = r.trimPrefix(cmd, prefix); !ok {
+			return
 		}
+
+		toks := NewToks(cmd)
+		if alias, ok = c.Match(toks); !ok {
+			return
+		}
+
+		ctx := NewContext()
+		ctx.Session = s
+		ctx.Alias = alias
+		ctx.Prefix = prefix
+		ctx.Message = m.Message
+		ctx.Toks = toks
+
+		args, err := c.Parse(ctx.Toks)
+		if err != nil {
+			ctx.Err = err
+			defer c.Catch(ctx)
+			return
+		}
+		ctx.Args = args
+		ctx.Filter = f
+
+		if ok, failedFilters := f.allow(ctx); ok {
+			ctx.Err = c.Handle(ctx)
+		} else {
+			ctx.Err = ctx.filterToErr(failedFilters)
+		}
+
+		defer c.Catch(ctx)
 	}
 }

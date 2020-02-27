@@ -37,7 +37,7 @@ func (c *EchoCmd) Parse(toks sayori.Toks) (sayori.Args, error) {
 	args := sayori.NewArgs()
 
 	args.Store("alias", alias)
-	args.Store("to-echo", strings.Join(toks.Toks[1:], " "))
+	args.Store("to-echo", strings.Join(toks.Iter()[1:], " "))
 
 	return args, nil
 }

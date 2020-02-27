@@ -30,14 +30,14 @@ func (*OnMsg) Catch(ctx sayori.Context) {
 		return
 	}
 	switch e := ctx.Err.(type) {
-	case *sayori.RuleError:
-		switch e.Rule() {
-		case sayori.RuleHandleSelf:
-			log.Println("not counting this message.")
-		default:
+	case *sayori.FilterError:
+		if e.Filter().Contains(sayori.MessagesSelf) {
+			log.Printf("Filter failed for OnMsg; id:'%d'", e.Filter())
+		} else {
 			ctx.Session.ChannelMessageSend(
 				ctx.Message.ChannelID, e.Error())
 		}
+
 	default:
 		ctx.Session.ChannelMessageSend(
 			ctx.Message.ChannelID, e.Error())

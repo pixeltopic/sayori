@@ -34,15 +34,14 @@ func main() {
 	}
 
 	router := sayori.New(dg, &Prefixer{})
-	router.Has(&EchoCmd{}, nil)
+	router.Has(router.Command(&EchoCmd{}))
 
-	router.Will(
-		&OnMsg{},
-		sayori.NewRule(sayori.RuleHandleGuildMsgs, sayori.RuleHandlePrivateMsgs),
-	)
+	router.Has(router.Event(&OnMsg{}).
+		Filter(sayori.MessagesBot).
+		Filter(sayori.MessagesEmpty).
+		Filter(sayori.MessagesSelf))
 
-	// rule is currently ignored for discorgo-specific handlers
-	router.Will(onDelete, nil)
+	router.HasOnce(router.HandleDefault(onDelete))
 
 	err = dg.Open()
 	if err != nil {
