@@ -8,8 +8,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-const sessionID = "myid"
-
 type testPrefixer struct{}
 
 func (*testPrefixer) Load(_ string) (string, bool) {
@@ -162,7 +160,7 @@ func TestRouter(t *testing.T) {
 			testMessageLen = len(testMessage)
 		)
 
-		mockSession := testMockSession(sessionID)
+		mockSession := testMockSession("myid")
 		mockMessageCreate := testMockMessageCreate(
 			"fakeauthorID", false, "someguildID", testMessage)
 
@@ -209,7 +207,7 @@ func TestRouter(t *testing.T) {
 			testMessageLen = len(testMessage)
 		)
 
-		mockSession := testMockSession(sessionID)
+		mockSession := testMockSession("myid")
 		mockMessageCreate := testMockMessageCreate(
 			"fakeauthorID", false, "someguildID", testMessage)
 
@@ -237,6 +235,10 @@ func TestRouter(t *testing.T) {
 				}
 			}
 
+			if ctx.Alias != "myaliasecho" {
+				t.Errorf("expected ctx.Alias to equal %s, got %s", "myaliasecho", ctx.Alias)
+			}
+
 			return errors.New("its a failure oh no")
 		}
 
@@ -253,6 +255,7 @@ func TestRouter(t *testing.T) {
 					t.Fatalf("expected alias to be %s, got %s", "myaliasecho", strings.ToLower(alias))
 				}
 
+				// we don't actually need to return the alias as all lowercase, it's up to your implementation
 				return "myaliasecho", isMatch
 			}
 
@@ -263,6 +266,69 @@ func TestRouter(t *testing.T) {
 		testCommand(
 			t, &testPrefixer{}, parseCallback, handleCallback,
 			catchCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate)
+
+	})
+
+	t.Run("test command handling with filters", func(t *testing.T) {
+		const (
+			testMessage    = `myaliasEcho echo me please! This is a friendly message :)`
+			testMessageLen = len(testMessage)
+			alias          = "myaliasEcho"
+		)
+
+		mockSession := testMockSession("fakeauthorID")
+		mockMessageCreate := testMockMessageCreate(
+			"fakeauthorID", true, "someguildID", testMessage)
+
+		parseCallback := func(toks Toks) (Args, error) {
+			args := NewArgs()
+			args.Store("len", testMessageLen)
+			return args, nil
+		}
+
+		handleCallback := func(ctx Context) error {
+			t.Fatal("expected given handleCallback to never execute due to failed filters")
+			return errors.New("oof")
+		}
+
+		catchCallback := func(ctx Context) {
+			if ctx.Args == nil {
+				t.Error("ctx.Args is nil")
+			} else {
+				val, ok := ctx.Args.Load("len")
+				if !ok {
+					t.Fatal("ctx.Args[len] does not exist")
+				}
+
+				stored, _ := val.(int)
+				if stored != testMessageLen {
+					t.Errorf("expected ctx.Args[len] to equal '%d', got '%d'", testMessageLen, stored)
+				}
+			}
+			if ctx.Alias != alias {
+				t.Errorf("expected ctx.Alias to equal %s, got %s", alias, ctx.Alias)
+			}
+			if ctx.Err == nil {
+				t.Errorf("expected ctx.Err to equal '%s', got '%s'", "its a failure oh no", "nil")
+			} else {
+				filterErr, ok := ctx.Err.(*FilterError)
+				if !ok {
+					t.Fatal("expected filterErr to implement FilterError")
+				}
+
+				if filterErr.Filter() != NewFilter(MessagesBot, MessagesGuild, MessagesSelf) {
+					t.Error("incorrect filter failure code")
+				}
+			}
+		}
+
+		matchCallback := func(toks Toks) (string, bool) {
+			return alias, true
+		}
+
+		testCommand(
+			t, &testPrefixer{}, parseCallback, handleCallback,
+			catchCallback, matchCallback, NewFilter(MessagesGuild, MessagesBot, MessagesSelf), mockSession, mockMessageCreate)
 
 	})
 }
