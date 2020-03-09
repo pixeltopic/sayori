@@ -89,7 +89,7 @@ func testEvent(
 	incomingMockMessage *discordgo.MessageCreate,
 ) {
 	r := &Router{
-		session: mockSession,
+		Session: mockSession,
 		p:       nil,
 	}
 
@@ -123,7 +123,7 @@ func testCommand(
 	incomingMockMessage *discordgo.MessageCreate,
 ) {
 	r := &Router{
-		session: mockSession,
+		Session: mockSession,
 		p:       prefixer,
 	}
 

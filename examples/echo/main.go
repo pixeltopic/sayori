@@ -43,7 +43,7 @@ func main() {
 
 	router.HasOnce(router.HandleDefault(onDelete))
 
-	err = dg.Open()
+	err = router.Open()
 	if err != nil {
 		fmt.Println("error opening connection,", err)
 		return
@@ -54,5 +54,5 @@ func main() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
 
-	dg.Close()
+	router.Close()
 }

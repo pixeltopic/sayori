@@ -50,14 +50,14 @@ type (
 
 // Router maps commands to handlers.
 type Router struct {
-	session *discordgo.Session
-	p       Prefixer
+	*discordgo.Session
+	p Prefixer
 }
 
 // New returns a new Router.
-func New(dg *discordgo.Session, p Prefixer) *Router {
+func New(s *discordgo.Session, p Prefixer) *Router {
 	return &Router{
-		session: dg,
+		Session: s,
 		p:       p,
 	}
 }
@@ -153,14 +153,14 @@ func (r *Router) HasOnce(b *Builder) {
 }
 
 func (r *Router) addHandler(h interface{}) {
-	if r.session != nil && h != nil {
-		r.session.AddHandler(h)
+	if r.Session != nil && h != nil {
+		r.AddHandler(h)
 	}
 }
 
 func (r *Router) addHandlerOnce(h interface{}) {
-	if r.session != nil && h != nil {
-		r.session.AddHandlerOnce(h)
+	if r.Session != nil && h != nil {
+		r.AddHandlerOnce(h)
 	}
 }
 
