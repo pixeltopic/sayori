@@ -51,8 +51,8 @@ func (c *EchoCmd) Handle(ctx sayori.Context) error {
 	return nil
 }
 
-// Catch handles any errors
-func (c *EchoCmd) Catch(ctx sayori.Context) {
+// Resolve handles any errors
+func (c *EchoCmd) Resolve(ctx sayori.Context) {
 	if ctx.Err != nil {
 		ctx.Session.ChannelMessageSend(
 			ctx.Message.ChannelID, ctx.Err.Error())

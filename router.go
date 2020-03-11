@@ -19,7 +19,7 @@ type (
 
 	// Parseable represents an entity that can be parsed. It is implemented by `Command` but optional for `Event`
 	//
-	// `Parse` is where `Toks` will be parsed into `Args`. If an error is non-nil, will immediately be handled by `Catch(ctx Context)`
+	// `Parse` is where `Toks` will be parsed into `Args`. If an error is non-nil, will immediately be handled by `Resolve(ctx Context)`
 	Parseable interface {
 		Parse(toks Toks) (Args, error)
 	}
@@ -41,10 +41,10 @@ type (
 	//
 	// `Handle` is where a command's business logic should belong.
 	//
-	// `Catch` is where an error in `ctx.Err` should be handled if non-nil.
+	// `Resolve` is where an error in `ctx.Err` can be handled, along with any other necessary cleanup. It will always be the last function run.
 	Event interface {
 		Handle(ctx Context) error
-		Catch(ctx Context)
+		Resolve(ctx Context)
 	}
 )
 
@@ -176,7 +176,7 @@ func (r *Router) makeEvent(e Event, f Filter) func(*discordgo.Session, *discordg
 			args, err := p.Parse(ctx.Toks)
 			if err != nil {
 				ctx.Err = err
-				defer e.Catch(ctx)
+				defer e.Resolve(ctx)
 				return
 			}
 			ctx.Args = args
@@ -189,7 +189,7 @@ func (r *Router) makeEvent(e Event, f Filter) func(*discordgo.Session, *discordg
 			ctx.Err = ctx.filterToErr(failedFilters)
 		}
 
-		defer e.Catch(ctx)
+		defer e.Resolve(ctx)
 	}
 }
 
@@ -223,7 +223,7 @@ func (r *Router) makeCommand(c Command, f Filter) func(*discordgo.Session, *disc
 		args, err := c.Parse(ctx.Toks)
 		if err != nil {
 			ctx.Err = err
-			defer c.Catch(ctx)
+			defer c.Resolve(ctx)
 			return
 		}
 		ctx.Args = args
@@ -235,6 +235,6 @@ func (r *Router) makeCommand(c Command, f Filter) func(*discordgo.Session, *disc
 			ctx.Err = ctx.filterToErr(failedFilters)
 		}
 
-		defer c.Catch(ctx)
+		defer c.Resolve(ctx)
 	}
 }

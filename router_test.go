@@ -19,9 +19,9 @@ func (*testPrefixer) Default() string {
 }
 
 type testOnMsg struct {
-	HandleCallback func(ctx Context) error
-	CatchCallback  func(ctx Context)
-	ParseCallback  func(toks Toks) (Args, error)
+	HandleCallback  func(ctx Context) error
+	ResolveCallback func(ctx Context)
+	ParseCallback   func(toks Toks) (Args, error)
 }
 
 func (m *testOnMsg) Parse(toks Toks) (Args, error) {
@@ -33,9 +33,9 @@ func (m *testOnMsg) Handle(ctx Context) error {
 	return m.HandleCallback(ctx)
 }
 
-// Catch catches handler errors
-func (m *testOnMsg) Catch(ctx Context) {
-	m.CatchCallback(ctx)
+// Resolve catches handler errors
+func (m *testOnMsg) Resolve(ctx Context) {
+	m.ResolveCallback(ctx)
 }
 
 type testCmd struct {
@@ -83,7 +83,7 @@ func testEvent(
 	t *testing.T,
 	parseCallback func(toks Toks) (Args, error),
 	handleCallback func(ctx Context) error,
-	catchCallback func(ctx Context),
+	resolveCallback func(ctx Context),
 	filter Filter,
 	mockSession *discordgo.Session,
 	incomingMockMessage *discordgo.MessageCreate,
@@ -94,9 +94,9 @@ func testEvent(
 	}
 
 	event := &testOnMsg{
-		ParseCallback:  parseCallback,
-		HandleCallback: handleCallback,
-		CatchCallback:  catchCallback,
+		ParseCallback:   parseCallback,
+		HandleCallback:  handleCallback,
+		ResolveCallback: resolveCallback,
 	}
 
 	switch {
@@ -104,8 +104,8 @@ func testEvent(
 		t.Fatal("ParseCallback cannot be nil")
 	case event.HandleCallback == nil:
 		t.Fatal("HandleCallback cannot be nil")
-	case event.CatchCallback == nil:
-		t.Fatal("CatchCallback cannot be nil")
+	case event.ResolveCallback == nil:
+		t.Fatal("ResolveCallback cannot be nil")
 	}
 
 	r.makeEvent(event, filter)(mockSession, incomingMockMessage)
@@ -116,7 +116,7 @@ func testCommand(
 	prefixer Prefixer,
 	parseCallback func(toks Toks) (Args, error),
 	handleCallback func(ctx Context) error,
-	catchCallback func(ctx Context),
+	resolveCallback func(ctx Context),
 	matchCallback func(toks Toks) (string, bool),
 	filter Filter,
 	mockSession *discordgo.Session,
@@ -129,9 +129,9 @@ func testCommand(
 
 	cmd := &testCmd{
 		testOnMsg: testOnMsg{
-			ParseCallback:  parseCallback,
-			HandleCallback: handleCallback,
-			CatchCallback:  catchCallback,
+			ParseCallback:   parseCallback,
+			HandleCallback:  handleCallback,
+			ResolveCallback: resolveCallback,
 		},
 		MatchCallback: matchCallback,
 	}
@@ -141,8 +141,8 @@ func testCommand(
 		t.Fatal("ParseCallback cannot be nil")
 	case cmd.HandleCallback == nil:
 		t.Fatal("HandleCallback cannot be nil")
-	case cmd.CatchCallback == nil:
-		t.Fatal("CatchCallback cannot be nil")
+	case cmd.ResolveCallback == nil:
+		t.Fatal("ResolveCallback cannot be nil")
 	case cmd.MatchCallback == nil:
 		t.Fatal("MatchCallback cannot be nil")
 	}
@@ -192,14 +192,14 @@ func TestRouter(t *testing.T) {
 			return errors.New("its a failure oh no")
 		}
 
-		catchCallback := func(ctx Context) {
+		resolveCallback := func(ctx Context) {
 			if ctx.Err == nil {
 				t.Fatalf("expected ctx.Err to be non-nil")
 			}
 		}
 
 		testEvent(
-			t, parseCallback, handleCallback, catchCallback, NewFilter(), mockSession, mockMessageCreate)
+			t, parseCallback, handleCallback, resolveCallback, NewFilter(), mockSession, mockMessageCreate)
 	})
 
 	t.Run("test command handling", func(t *testing.T) {
@@ -245,7 +245,7 @@ func TestRouter(t *testing.T) {
 			return errors.New("its a failure oh no")
 		}
 
-		catchCallback := func(ctx Context) {
+		resolveCallback := func(ctx Context) {
 			if ctx.Err == nil {
 				t.Fatalf("expected ctx.Err to be non-nil")
 			}
@@ -268,7 +268,7 @@ func TestRouter(t *testing.T) {
 
 		testCommand(
 			t, &testPrefixer{}, parseCallback, handleCallback,
-			catchCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate)
+			resolveCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate)
 
 	})
 
@@ -296,7 +296,7 @@ func TestRouter(t *testing.T) {
 			return nil
 		}
 
-		catchCallback := func(ctx Context) {
+		resolveCallback := func(ctx Context) {
 			// test ctx.Args
 			if ctx.Args == nil {
 				t.Fatal("ctx.Args is nil")
@@ -337,7 +337,7 @@ func TestRouter(t *testing.T) {
 
 		testCommand(
 			t, &testPrefixer{}, parseCallback, handleCallback,
-			catchCallback, matchCallback, NewFilter(MessagesGuild, MessagesSelf), mockSession, mockMessageCreate)
+			resolveCallback, matchCallback, NewFilter(MessagesGuild, MessagesSelf), mockSession, mockMessageCreate)
 
 	})
 }

@@ -24,8 +24,8 @@ func (m *OnMsg) Handle(ctx sayori.Context) error {
 	return nil
 }
 
-// Catch catches handler errors
-func (*OnMsg) Catch(ctx sayori.Context) {
+// Resolve catches handler errors
+func (*OnMsg) Resolve(ctx sayori.Context) {
 	if ctx.Err == nil {
 		return
 	}
