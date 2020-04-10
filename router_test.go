@@ -108,7 +108,7 @@ func testEvent(
 		t.Fatal("ResolveCallback cannot be nil")
 	}
 
-	r.makeEvent(event, filter)(mockSession, incomingMockMessage)
+	r.makeEvent(event, filter, nil)(mockSession, incomingMockMessage)
 }
 
 func testCommand(
@@ -147,7 +147,7 @@ func testCommand(
 		t.Fatal("MatchCallback cannot be nil")
 	}
 
-	r.makeCommand(cmd, filter)(mockSession, incomingMockMessage)
+	r.makeCommand(cmd, filter, nil)(mockSession, incomingMockMessage)
 
 }
 
