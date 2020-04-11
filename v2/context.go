@@ -10,7 +10,7 @@ type Context struct {
 	Msg    *discordgo.Message
 	Prefix *string
 	Alias  []string
-	Toks   []string
+	Args   []string
 	Err    error
 }
 
@@ -21,7 +21,7 @@ func NewContext() *Context {
 		Msg:    nil,
 		Prefix: nil,
 		Alias:  []string{},
-		Toks:   []string{},
+		Args:   []string{},
 		Err:    nil,
 	}
 }

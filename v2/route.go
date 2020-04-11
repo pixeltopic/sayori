@@ -78,6 +78,9 @@ type Route struct {
 
 // getGuildPrefix returns guildID's custom prefix or if none, returns default prefix
 func (r *Route) getGuildPrefix(guildID string) string {
+	if r.p == nil {
+		return ""
+	}
 	prefix, ok := r.p.Load(guildID)
 	if !ok {
 		prefix = r.p.Default()
@@ -92,6 +95,7 @@ func (r *Route) On(aliases ...string) *Route {
 }
 
 // Has binds subroutes to the current route.
+// Subroutes are executed sequentially, assuming the current route handler succeeds
 func (r *Route) Has(subroutes ...*Route) *Route {
 	r.subroutes = append(r.subroutes, subroutes...)
 	return r
@@ -104,10 +108,9 @@ func (r *Route) Use(middlewares ...Middlewarer) *Route {
 }
 
 // Do composes a commander implementation into a MsgHandler
+//
+// if `cmd` is nil, will simply update ctx and proceed to execute subhandlers if present
 func (r *Route) Do(cmd Commander) *Route {
-	if cmd == nil {
-		return r // TODO: subroute handling; extract prefix and first token; follow makeCtxHandler
-	}
 	r.handler = r.makeCtxHandler(cmd)
 	return r
 }
@@ -131,9 +134,12 @@ func (r *Route) makeCtxHandler(c Commander) CtxHandler {
 				return
 			}
 		}
-		defer c.Resolve(ctx)
 
-		toks, err := handleParse(c, cmd)
+		if c != nil {
+			defer c.Resolve(ctx)
+		}
+
+		args, err := handleParse(c, cmd)
 		if err != nil {
 			ctx.Err = err
 			return
@@ -146,13 +152,15 @@ func (r *Route) makeCtxHandler(c Commander) CtxHandler {
 
 		// finish initializing ctx
 		ctx.Alias = append(ctx.Alias, alias)
-		ctx.Toks = toks[1:]
+		ctx.Args = args[1:]
 
 		if ctx.Err = handleMiddlewares(ctx, r.middlewares); ctx.Err != nil {
 			return
 		}
 
-		ctx.Err = c.Handle(ctx)
+		if c != nil {
+			ctx.Err = c.Handle(ctx)
+		}
 
 		for _, sub := range r.subroutes {
 			sub.handler(ctx) // TODO: create a deep copy of ctx in case multiple subroutes get executed
