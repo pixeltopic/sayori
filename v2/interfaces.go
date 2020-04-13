@@ -8,8 +8,8 @@ type (
 		Parse(string) ([]string, error)
 	}
 
-	// CtxHandler accepts a Context.
-	CtxHandler func(ctx *Context)
+	// HandlerFunc handles the command given a Context.
+	HandlerFunc func(ctx *Context)
 
 	// Middlewarer allows a custom handler to determine if a message should be routed to the Command or Event handler.
 	//

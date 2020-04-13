@@ -1,8 +1,11 @@
 package v2
 
 import (
+	"fmt"
 	"strings"
 )
+
+// TODO: remove useless funcs, move some logic into helper funcs, test subcommands, write tests for different combinations of interfaces/aliases/middlewares/etc
 
 var cmdParserDefault = strings.Fields
 
@@ -65,18 +68,48 @@ func trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Route wraps a command and contains its handler logic, aliases, and subroutes
+// Route wraps a command and contains its
+// handler logic, aliases, and subroutes
 type Route struct {
-	p   Prefixer
-	cmd Commander
+	c Commander
+	p Prefixer
 
 	aliases     []string
-	handler     CtxHandler
+	handler     HandlerFunc // handler func is only executed on the top level if a route is not a subroute. if subroute, directly accesses handle/resolve
 	subroutes   []*Route
 	middlewares []Middlewarer
 }
 
-// getGuildPrefix returns guildID's custom prefix or if none, returns default prefix
+// HasAlias returns whether the given string is an alias or not.
+// Not case sensitive.
+//
+// Since Events do not have an alias, if the route has no aliases it will default to true.
+func (r *Route) HasAlias(a string) bool {
+	if len(r.aliases) == 0 {
+		return true
+	}
+	a = strings.ToLower(a)
+	for _, alias := range r.aliases {
+		if strings.ToLower(alias) == a {
+			return true
+		}
+	}
+	return false
+}
+
+// Find a subroute alias in this route's direct children.
+// If alias is not found, will return nil
+func (r *Route) Find(subAlias string) *Route {
+	for _, sub := range r.subroutes {
+		if sub.HasAlias(subAlias) {
+			return sub
+		}
+	}
+	return nil
+}
+
+// getGuildPrefix returns guildID's custom prefix or if none,
+// returns default prefix
 func (r *Route) getGuildPrefix(guildID string) string {
 	if r.p == nil {
 		return ""
@@ -88,14 +121,16 @@ func (r *Route) getGuildPrefix(guildID string) string {
 	return prefix
 }
 
-// On adds new identifiers for a Route
+// On adds new identifiers for a Route.
+// Identifiers must not have any whitespace.
 func (r *Route) On(aliases ...string) *Route {
 	r.aliases = append(r.aliases, aliases...)
 	return r
 }
 
 // Has binds subroutes to the current route.
-// Subroutes are executed sequentially, assuming the current route handler succeeds
+// Subroutes are executed sequentially,
+// assuming the current route handler succeeds
 func (r *Route) Has(subroutes ...*Route) *Route {
 	r.subroutes = append(r.subroutes, subroutes...)
 	return r
@@ -107,23 +142,33 @@ func (r *Route) Use(middlewares ...Middlewarer) *Route {
 	return r
 }
 
-// Do composes a commander implementation into a MsgHandler
+// Do composes a commander implementation into a CtxHandler
 //
-// if `cmd` is nil, will simply update ctx and proceed to execute subhandlers if present
+// if cmd is nil, will simply update ctx and
+// proceed to execute subhandlers if present
 func (r *Route) Do(cmd Commander) *Route {
-	r.handler = r.makeCtxHandler(cmd)
+	r.c = cmd
+	r.handler = r.createHandlerFunc()
+	//r.handler = r.makeCtxHandler(cmd)
 	return r
 }
 
-// makeCtxHandler creates a MsgHandler given a command
-func (r *Route) makeCtxHandler(c Commander) CtxHandler {
-	var (
-		alias string
-		ok    bool
-	)
+// findDeepestHandler finds the deepest route matching the subcommand and executes its handler
+// with an accumulated context
+//
+// ctx must contain the session and message.
+func (r *Route) createHandlerFunc() HandlerFunc {
+
+	if r.c == nil {
+		return nil
+	}
 
 	return func(ctx *Context) {
-		cmd := ctx.Msg.Content
+		var (
+			alias string
+			ok    bool
+			cmd   = ctx.Msg.Content
+		)
 
 		// only do this if we are at a top level command
 		// must compare with nil because Events have empty string prefixes
@@ -135,36 +180,116 @@ func (r *Route) makeCtxHandler(c Commander) CtxHandler {
 			}
 		}
 
-		if c != nil {
-			defer c.Resolve(ctx)
-		}
+		fmt.Println("@@@ cmd:", cmd)
 
-		args, err := handleParse(c, cmd)
+		// if parse fails, execute resolver for root level subroute
+		//if c != nil {
+		//	defer c.Resolve(ctx)
+		//}
+
+		args, err := handleParse(r.c, cmd)
 		if err != nil {
 			ctx.Err = err
+			r.c.Resolve(ctx)
 			return
 		}
 
-		// TODO: find out if these aliases get updated if this is called before alias/middleware initialization
-		if alias, ok = matchAlias(r.aliases, alias); !ok {
+		fmt.Println("@@@ args:", args)
+
+		route := r
+		for depth := 0; len(args) > 0; depth++ {
+			fmt.Printf("depth %d; args := %s\n", depth, args)
+			//fmt.Println("@@@ args:", args)
+
+			alias = args[0]
+			if route.HasAlias(alias) {
+				ctx.Alias = append(ctx.Alias, alias)
+			} else {
+				if depth == 0 {
+					//ctx.Args = append(ctx.Args, args...)
+					//ctx.Err = errors.New("no matching alias")
+					return
+				}
+				ctx.Args = append(ctx.Args, args[1:]...)
+				break
+			}
+			args = args[1:]
+			if len(args) > 0 {
+				subroute := route.Find(args[0])
+				if subroute == nil {
+					ctx.Args = append(ctx.Args, args...)
+					break
+				} else {
+					fmt.Println("subroute found")
+					route = subroute
+				}
+			}
+		}
+
+		if ctx.Err = handleMiddlewares(ctx, route.middlewares); ctx.Err != nil {
+			route.c.Resolve(ctx)
 			return
 		}
 
-		// finish initializing ctx
-		ctx.Alias = append(ctx.Alias, alias)
-		ctx.Args = args[1:]
+		ctx.Err = route.c.Handle(ctx)
 
-		if ctx.Err = handleMiddlewares(ctx, r.middlewares); ctx.Err != nil {
-			return
-		}
+		route.c.Resolve(ctx)
 
-		if c != nil {
-			ctx.Err = c.Handle(ctx)
-		}
+	}
+}
 
-		for _, sub := range r.subroutes {
-			sub.handler(ctx) // TODO: create a deep copy of ctx in case multiple subroutes get executed
-		}
+// makeCtxHandler creates a MsgHandler given a command
+func (r *Route) makeCtxHandler(c Commander) HandlerFunc {
+	//var (
+	//	alias string
+	//	ok    bool
+	//)
+
+	return func(ctx *Context) {
+		//cmd := ctx.Msg.Content
+		//
+		//// only do this if we are at a top level command
+		//// must compare with nil because Events have empty string prefixes
+		//if ctx.Prefix == nil {
+		//	prefix := r.getGuildPrefix(ctx.Msg.GuildID)
+		//	ctx.Prefix = &prefix
+		//	if cmd, ok = trimPrefix(cmd, *ctx.Prefix); !ok {
+		//		return
+		//	}
+		//}
+
+		//if c != nil {
+		//	defer c.Resolve(ctx)
+		//}
+
+		//args, err := handleParse(c, cmd)
+		//if err != nil {
+		//	ctx.Err = err
+		//	return
+		//}
+
+		//	if len(r.aliases) > 0 && len(args) >= 1 {
+		//		if alias, ok = matchAlias(r.aliases, args[0]); !ok {
+		//			return
+		//		}
+		//		// finish initializing ctx
+		//		ctx.Alias = append(ctx.Alias, alias)
+		//		ctx.Args = args[1:]
+		//	} else if len(r.aliases) > 0 && len(args) == 0 {
+		//		return
+		//	}
+		//
+		//	if ctx.Err = handleMiddlewares(ctx, r.middlewares); ctx.Err != nil {
+		//		return
+		//	}
+		//
+		//	if c != nil {
+		//		ctx.Err = c.Handle(ctx)
+		//	}
+		//
+		//	for _, sub := range r.subroutes {
+		//		sub.handler(CopyContext(ctx))
+		//	}
 	}
 }
 
