@@ -4,7 +4,7 @@ import (
 	"log"
 	"sync"
 
-	v2 "github.com/pixeltopic/sayori/v2"
+	"github.com/pixeltopic/sayori/v2/context"
 )
 
 // OnMsg will run on every message event and count
@@ -15,7 +15,7 @@ type OnMsg struct {
 }
 
 // Handle will run on a MessageCreate event.
-func (m *OnMsg) Handle(ctx *v2.Context) error {
+func (m *OnMsg) Handle(_ *context.Context) error {
 	m.Lock()
 	defer m.Unlock()
 
@@ -25,5 +25,5 @@ func (m *OnMsg) Handle(ctx *v2.Context) error {
 }
 
 // Resolve catches handler errors
-func (*OnMsg) Resolve(ctx *v2.Context) {
+func (*OnMsg) Resolve(_ *context.Context) {
 }

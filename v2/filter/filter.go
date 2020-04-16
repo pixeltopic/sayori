@@ -1,23 +1,41 @@
-package v2
+package filter
 
-import "github.com/bwmarrin/discordgo"
+import (
+	"fmt"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/pixeltopic/sayori/v2/context"
+)
+
+// FmtErrDefault is the default format function to convert failing Filter(s) into an error string
+func FmtErrDefault(f Filter) string {
+	return fmt.Sprintf("filter fail code '%d'", f)
+}
 
 // Filter represents a condition that prevents a `Command` or `Event` from firing.
 // Only use the given const filters which range from 2^0 to 2^4.
 type Filter int
 
-// FilterError is an error that has a failing Filter attached
-type FilterError struct {
+// AsError returns the filter as an error
+func (f Filter) AsError() error {
+	return &Error{
+		f:      f,
+		reason: FmtErrDefault(f),
+	}
+}
+
+// Error is an error that has a failing Filter attached
+type Error struct {
 	f      Filter
 	reason string
 }
 
 // Filter returns the violated filter
-func (e *FilterError) Filter() Filter {
+func (e *Error) Filter() Filter {
 	return e.f
 }
 
-func (e *FilterError) Error() string {
+func (e *Error) Error() string {
 	return e.reason
 }
 
@@ -36,8 +54,8 @@ const (
 	MsgIsGuildText
 )
 
-// NewFilter generates a Filter bitset given filters and performing a bitwise `or` on all of them
-func NewFilter(filters ...Filter) Filter {
+// New generates a Filter bitset given filters and performing a bitwise "or" on all of them
+func New(filters ...Filter) Filter {
 	var filter Filter
 	for _, f := range filters {
 		filter = filter | f
@@ -60,7 +78,7 @@ func (f Filter) ignores(filter Filter) bool {
 // returns true if allowed with a zero value Filter, or false with all failing Filters combined with a bitwise `or`.
 //
 // if ctx.Msg or ctx.Ses is nil, will return false with a zero value Filter.
-func (f Filter) Validate(ctx *Context) (bool, Filter) {
+func (f Filter) Validate(ctx *context.Context) (bool, Filter) {
 	var failed Filter
 	if ctx.Msg == nil || ctx.Ses == nil {
 		return false, failed

@@ -1,4 +1,4 @@
-package v2
+package context
 
 import (
 	"github.com/bwmarrin/discordgo"
@@ -15,8 +15,8 @@ type Context struct {
 	Err    error
 }
 
-// NewContext returns a new Context.
-func NewContext() *Context {
+// New returns a new Context.
+func New() *Context {
 	return &Context{
 		Ses:    nil,
 		Msg:    nil,

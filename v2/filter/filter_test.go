@@ -1,12 +1,14 @@
-package v2
+package filter
 
 import (
 	"testing"
 
+	"github.com/pixeltopic/sayori/v2/context"
+
 	"github.com/bwmarrin/discordgo"
 )
 
-func testNewCtx(msgGuildID, msgContent, authorID, selfUserID string, authorBot bool) *Context {
+func testNewCtx(msgGuildID, msgContent, authorID, selfUserID string, authorBot bool) *context.Context {
 	message := &discordgo.Message{
 		Author: &discordgo.User{
 			ID:  authorID,
@@ -23,14 +25,14 @@ func testNewCtx(msgGuildID, msgContent, authorID, selfUserID string, authorBot b
 		State: state,
 	}
 
-	ctx := NewContext()
+	ctx := context.New()
 	ctx.Msg = message
 	ctx.Ses = session
 	return ctx
 }
 
-func testNewBadCtx(s *discordgo.Session, m *discordgo.Message) *Context {
-	ctx := NewContext()
+func testNewBadCtx(s *discordgo.Session, m *discordgo.Message) *context.Context {
+	ctx := context.New()
 	ctx.Msg = m
 	ctx.Ses = s
 	return ctx
@@ -44,7 +46,7 @@ func TestFilter(t *testing.T) {
 	)
 
 	t.Run("test new empty filter", func(t *testing.T) {
-		filter = NewFilter()
+		filter = New()
 		for i = 0; i < 5; i++ {
 			fID := Filter(1 << i)
 			res = filter.Contains(fID)
@@ -56,7 +58,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("test Filter that filters out 1 << 0 and 1 << 2", func(t *testing.T) {
-		filter = NewFilter(Filter(1), Filter(4))
+		filter = New(Filter(1), Filter(4))
 
 		for i = 0; i < 5; i++ {
 			fID := Filter(1 << i)
@@ -85,23 +87,23 @@ func TestFilter(t *testing.T) {
 	t.Run("test allow", func(t *testing.T) {
 		var (
 			filter, errFilter Filter
-			ctx               *Context
+			ctx               *context.Context
 			ok                bool
 		)
 
-		filter = NewFilter()
+		filter = New()
 		_, errFilter = filter.Validate(testNewCtx("", "my message", "sayoriuser", "sayoribot", false))
 		testAllowResult(t, Filter(0), errFilter)
 
 		// filter out bot messages and empty messages
-		filter = NewFilter(MsgFromBot, MsgNoContent)
+		filter = New(MsgFromBot, MsgNoContent)
 		_, errFilter = filter.Validate(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
-		testAllowResult(t, NewFilter(MsgFromBot, MsgNoContent), errFilter)
+		testAllowResult(t, New(MsgFromBot, MsgNoContent), errFilter)
 
 		// should pass the filter
-		filter = NewFilter(MsgFromWebhook)
+		filter = New(MsgFromWebhook)
 		ok, errFilter = filter.Validate(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
-		testAllowResult(t, NewFilter(0), errFilter)
+		testAllowResult(t, New(0), errFilter)
 		if !ok {
 			t.Fatal("incorrect Filter; expected true but got false")
 		}
@@ -113,7 +115,7 @@ func TestFilter(t *testing.T) {
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: state}, &discordgo.Message{Author: nil})
 
-		filter = NewFilter(MsgFromSelf)
+		filter = New(MsgFromSelf)
 		_, errFilter = filter.Validate(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
@@ -121,7 +123,7 @@ func TestFilter(t *testing.T) {
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: nil}, &discordgo.Message{Author: &discordgo.User{}})
 
-		filter = NewFilter(MsgFromSelf)
+		filter = New(MsgFromSelf)
 		_, errFilter = filter.Validate(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
@@ -129,27 +131,27 @@ func TestFilter(t *testing.T) {
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: discordgo.NewState()}, &discordgo.Message{Author: &discordgo.User{}})
 
-		filter = NewFilter(MsgFromSelf)
+		filter = New(MsgFromSelf)
 		_, errFilter = filter.Validate(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
 		// filter out self messages
-		filter = NewFilter(MsgFromSelf)
+		filter = New(MsgFromSelf)
 		_, errFilter = filter.Validate(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
-		testAllowResult(t, NewFilter(MsgFromSelf), errFilter)
+		testAllowResult(t, New(MsgFromSelf), errFilter)
 
 		// Author in Message is nil
 		ctx = testNewBadCtx(
 			&discordgo.Session{State: discordgo.NewState()}, &discordgo.Message{Author: nil})
 
-		filter = NewFilter(MsgFromBot)
+		filter = New(MsgFromBot)
 		_, errFilter = filter.Validate(ctx)
 		testAllowResult(t, Filter(0), errFilter)
 
 		// filter out bot messages
-		filter = NewFilter(MsgFromBot)
+		filter = New(MsgFromBot)
 		_, errFilter = filter.Validate(testNewCtx("myguildid", "", "sayoribot", "sayoribot", true))
-		testAllowResult(t, NewFilter(MsgFromBot), errFilter)
+		testAllowResult(t, New(MsgFromBot), errFilter)
 
 	})
 }

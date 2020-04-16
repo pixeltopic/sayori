@@ -2,10 +2,12 @@ package v2
 
 import (
 	"strings"
+
+	"github.com/pixeltopic/sayori/v2/context"
 )
 
 // TODO: test subcommands, write tests for different combinations of interfaces/aliases/middlewares/etc
-// Add filter support with revamped DM detection
+// Add filter support with revamped DM detection.
 
 var cmdParserDefault = strings.Fields
 
@@ -24,7 +26,7 @@ func handleParse(c Commander, content string) ([]string, error) {
 
 // handleMiddlewares runs each middleware in order until completion.
 // Will abort on the first error returned by a middleware.
-func handleMiddlewares(ctx *Context, m []Middlewarer) error {
+func handleMiddlewares(ctx *context.Context, m []Middlewarer) error {
 	for i := 0; i < len(m); i++ {
 		if err := m[i].Do(ctx); err != nil {
 			return err
@@ -150,7 +152,7 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 		return nil
 	}
 
-	return func(ctx *Context) {
+	return func(ctx *context.Context) {
 		var (
 			//alias string
 			ok  bool

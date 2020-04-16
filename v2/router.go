@@ -2,6 +2,7 @@ package v2
 
 import (
 	"github.com/bwmarrin/discordgo"
+	"github.com/pixeltopic/sayori/v2/context"
 )
 
 // Router maps commands to handlers.
@@ -33,7 +34,7 @@ func (r *Router) Has(route *Route) {
 	}
 
 	handler := func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		ctx := NewContext()
+		ctx := context.New()
 		ctx.Msg = m.Message
 		ctx.Ses = s
 
@@ -51,7 +52,7 @@ func (r *Router) HasOnce(route *Route) {
 	}
 
 	handler := func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		ctx := NewContext()
+		ctx := context.New()
 		ctx.Msg = m.Message
 		ctx.Ses = s
 

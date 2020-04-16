@@ -1,5 +1,7 @@
 package v2
 
+import "github.com/pixeltopic/sayori/v2/context"
+
 type (
 	// CmdParser parses the content of a Discord message into a string slice.
 	//
@@ -9,7 +11,7 @@ type (
 	}
 
 	// HandlerFunc handles the command given a Context.
-	HandlerFunc func(ctx *Context)
+	HandlerFunc func(ctx *context.Context)
 
 	// Middlewarer allows a custom handler to determine if a message should be routed to the Command or Event handler.
 	//
@@ -18,28 +20,27 @@ type (
 	//
 	// If context is mutated within the middleware, it will propagate to future handlers.
 	Middlewarer interface {
-		Do(ctx *Context) error
+		Do(ctx *context.Context) error
 	}
 
-	// Prefixer identifies the prefix based on the guildID before a `Command` execution and removes the prefix of the command string if matched.
+	// Prefixer identifies the prefix based on the guildID before a Command execution and removes the prefix of the command string if matched.
 	//
-	// `Load` fetches a prefix that matches the `guildID` and returns the prefix mapped to the `guildID` with an `ok` bool.
+	// Load fetches a prefix that matches the guildID and returns the prefix mapped to the guildID with an ok bool.
 	//
-	// `Default` returns the default prefix
+	// Default returns the default prefix
 	Prefixer interface {
 		Load(guildID string) (string, bool)
 		Default() string
 	}
 
-	// Commander is used to handle a command which will only be run on a `*discordgo.MessageCreate` event.
-	// Encapsulates the implementation of `Event`
-	// Can optionally implement `Parseable`, but is not required.
+	// Commander is used to handle a command which will only be run on a *discordgo.MessageCreate event.
+	// Can optionally implement CmdParser, but is not required.
 	//
-	// `Handle` is where a command's business logic should belong.
+	// Handle is where a command's business logic should belong.
 	//
-	// `Resolve` is where an error in `ctx.Err` can be handled, along with any other necessary cleanup. It will always be the last function run.
+	// Resolve is where an error in ctx.Err can be handled, along with any other necessary cleanup. It will always be the last function run.
 	Commander interface {
-		Handle(ctx *Context) error
-		Resolve(ctx *Context)
+		Handle(ctx *context.Context) error
+		Resolve(ctx *context.Context)
 	}
 )
