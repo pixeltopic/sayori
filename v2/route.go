@@ -1,25 +1,13 @@
 package v2
 
 import (
-	"fmt"
 	"strings"
 )
 
-// TODO: remove useless funcs, move some logic into helper funcs, test subcommands, write tests for different combinations of interfaces/aliases/middlewares/etc
+// TODO: test subcommands, write tests for different combinations of interfaces/aliases/middlewares/etc
+// Add filter support with revamped DM detection
 
 var cmdParserDefault = strings.Fields
-
-func matchAlias(aliases []string, token string) (string, bool) {
-	alias := strings.ToLower(token)
-
-	for _, validAlias := range aliases {
-		if alias == strings.ToLower(validAlias) { // do not use HasPrefix, or something like `e!ec ho` will pass despite not matching any alias
-			return alias, true
-		}
-	}
-
-	return "", false
-}
 
 // handleParse checks if an event implements Parseable; if it does, runs Parseable. Else, runs default parser
 func handleParse(c Commander, content string) ([]string, error) {
@@ -165,9 +153,9 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 
 	return func(ctx *Context) {
 		var (
-			alias string
-			ok    bool
-			cmd   = ctx.Msg.Content
+			//alias string
+			ok  bool
+			cmd = ctx.Msg.Content
 		)
 
 		// only do this if we are at a top level command
@@ -180,12 +168,7 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 			}
 		}
 
-		fmt.Println("@@@ cmd:", cmd)
-
-		// if parse fails, execute resolver for root level subroute
-		//if c != nil {
-		//	defer c.Resolve(ctx)
-		//}
+		//fmt.Println("@@@ cmd:", cmd)
 
 		args, err := handleParse(r.c, cmd)
 		if err != nil {
@@ -194,37 +177,14 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 			return
 		}
 
-		fmt.Println("@@@ args:", args)
+		//fmt.Println("@@@ args:", args)
 
-		route := r
-		for depth := 0; len(args) > 0; depth++ {
-			fmt.Printf("depth %d; args := %s\n", depth, args)
-			//fmt.Println("@@@ args:", args)
-
-			alias = args[0]
-			if route.HasAlias(alias) {
-				ctx.Alias = append(ctx.Alias, alias)
-			} else {
-				if depth == 0 {
-					//ctx.Args = append(ctx.Args, args...)
-					//ctx.Err = errors.New("no matching alias")
-					return
-				}
-				ctx.Args = append(ctx.Args, args[1:]...)
-				break
-			}
-			args = args[1:]
-			if len(args) > 0 {
-				subroute := route.Find(args[0])
-				if subroute == nil {
-					ctx.Args = append(ctx.Args, args...)
-					break
-				} else {
-					fmt.Println("subroute found")
-					route = subroute
-				}
-			}
+		route, depth := findRoute(r, args)
+		if route == nil {
+			return
 		}
+		ctx.Alias = append(ctx.Alias, args[:depth]...)
+		ctx.Args = append(ctx.Args, args[depth:]...)
 
 		if ctx.Err = handleMiddlewares(ctx, route.middlewares); ctx.Err != nil {
 			route.c.Resolve(ctx)
@@ -238,61 +198,6 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 	}
 }
 
-// makeCtxHandler creates a MsgHandler given a command
-func (r *Route) makeCtxHandler(c Commander) HandlerFunc {
-	//var (
-	//	alias string
-	//	ok    bool
-	//)
-
-	return func(ctx *Context) {
-		//cmd := ctx.Msg.Content
-		//
-		//// only do this if we are at a top level command
-		//// must compare with nil because Events have empty string prefixes
-		//if ctx.Prefix == nil {
-		//	prefix := r.getGuildPrefix(ctx.Msg.GuildID)
-		//	ctx.Prefix = &prefix
-		//	if cmd, ok = trimPrefix(cmd, *ctx.Prefix); !ok {
-		//		return
-		//	}
-		//}
-
-		//if c != nil {
-		//	defer c.Resolve(ctx)
-		//}
-
-		//args, err := handleParse(c, cmd)
-		//if err != nil {
-		//	ctx.Err = err
-		//	return
-		//}
-
-		//	if len(r.aliases) > 0 && len(args) >= 1 {
-		//		if alias, ok = matchAlias(r.aliases, args[0]); !ok {
-		//			return
-		//		}
-		//		// finish initializing ctx
-		//		ctx.Alias = append(ctx.Alias, alias)
-		//		ctx.Args = args[1:]
-		//	} else if len(r.aliases) > 0 && len(args) == 0 {
-		//		return
-		//	}
-		//
-		//	if ctx.Err = handleMiddlewares(ctx, r.middlewares); ctx.Err != nil {
-		//		return
-		//	}
-		//
-		//	if c != nil {
-		//		ctx.Err = c.Handle(ctx)
-		//	}
-		//
-		//	for _, sub := range r.subroutes {
-		//		sub.handler(CopyContext(ctx))
-		//	}
-	}
-}
-
 // NewRoute returns a new Route.
 func NewRoute(p Prefixer) *Route {
 	return &Route{
@@ -301,4 +206,31 @@ func NewRoute(p Prefixer) *Route {
 		subroutes:   []*Route{},
 		middlewares: []Middlewarer{},
 	}
+}
+
+func findRoute(route *Route, args []string) (*Route, int) {
+	depth := 0
+	for ; len(args) > 0; depth++ {
+		//fmt.Printf("depth %d; args := %s\n", depth, args)
+		//fmt.Println("@@@ args:", args)
+
+		alias := args[0]
+		if !route.HasAlias(alias) {
+			if depth == 0 {
+				return nil, depth // no match with top level alias, so do not execute any command
+			}
+			return route, depth
+		}
+
+		args = args[1:]
+		if len(args) > 0 {
+			subroute := route.Find(args[0])
+			if subroute != nil {
+				route = subroute
+			} else {
+				return route, depth + 1
+			}
+		}
+	}
+	return route, depth
 }
