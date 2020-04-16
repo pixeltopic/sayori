@@ -132,12 +132,11 @@ func (r *Route) Use(middlewares ...Middlewarer) *Route {
 
 // Do composes a commander implementation into a CtxHandler
 //
-// if cmd is nil, will simply update ctx and
-// proceed to execute subhandlers if present
+// if cmd is nil, will no-op
 func (r *Route) Do(cmd Commander) *Route {
 	r.c = cmd
 	r.handler = r.createHandlerFunc()
-	//r.handler = r.makeCtxHandler(cmd)
+
 	return r
 }
 
@@ -199,6 +198,7 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 }
 
 // NewRoute returns a new Route.
+// If Prefixer is nil, will assume no prefix.
 func NewRoute(p Prefixer) *Route {
 	return &Route{
 		p:           p,
@@ -208,6 +208,7 @@ func NewRoute(p Prefixer) *Route {
 	}
 }
 
+// findRoute finds the deepest subroute and returns it along with the depth.
 func findRoute(route *Route, args []string) (*Route, int) {
 	depth := 0
 	for ; len(args) > 0; depth++ {
