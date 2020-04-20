@@ -6,9 +6,6 @@ import (
 	"github.com/pixeltopic/sayori/v2/context"
 )
 
-// TODO: test subcommands, write tests for different combinations of interfaces/aliases/middlewares/etc
-// Add filter support with revamped DM detection.
-
 var cmdParserDefault = strings.Fields
 
 // handleParse checks if an event implements Parseable; if it does, runs Parseable. Else, runs default parser
@@ -169,16 +166,12 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 			}
 		}
 
-		//fmt.Println("@@@ cmd:", cmd)
-
 		args, err := handleParse(r.c, cmd)
 		if err != nil {
 			ctx.Err = err
 			r.c.Resolve(ctx)
 			return
 		}
-
-		//fmt.Println("@@@ args:", args)
 
 		route, depth := findRoute(r, args)
 		if route == nil {
@@ -214,9 +207,6 @@ func NewRoute(p Prefixer) *Route {
 func findRoute(route *Route, args []string) (*Route, int) {
 	depth := 0
 	for ; len(args) > 0; depth++ {
-		//fmt.Printf("depth %d; args := %s\n", depth, args)
-		//fmt.Println("@@@ args:", args)
-
 		alias := args[0]
 		if !route.HasAlias(alias) {
 			if depth == 0 {
