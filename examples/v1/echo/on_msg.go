@@ -34,12 +34,12 @@ func (*OnMsg) Resolve(ctx sayori.Context) {
 		if e.Filter().Contains(sayori.MessagesSelf) {
 			log.Printf("Filter failed for OnMsg; id:'%d'", e.Filter())
 		} else {
-			ctx.Session.ChannelMessageSend(
+			_, _ = ctx.Session.ChannelMessageSend(
 				ctx.Message.ChannelID, e.Error())
 		}
 
 	default:
-		ctx.Session.ChannelMessageSend(
+		_, _ = ctx.Session.ChannelMessageSend(
 			ctx.Message.ChannelID, e.Error())
 	}
 

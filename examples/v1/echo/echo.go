@@ -45,7 +45,7 @@ func (c *EchoCmd) Parse(toks sayori.Toks) (sayori.Args, error) {
 // Handle handles the echo command
 func (c *EchoCmd) Handle(ctx sayori.Context) error {
 	if msg, ok := ctx.Args.Load("to-echo"); ok {
-		ctx.Session.ChannelMessageSend(
+		_, _ = ctx.Session.ChannelMessageSend(
 			ctx.Message.ChannelID, "Echoing! "+msg.(string))
 	}
 	return nil
@@ -54,7 +54,7 @@ func (c *EchoCmd) Handle(ctx sayori.Context) error {
 // Resolve handles any errors
 func (c *EchoCmd) Resolve(ctx sayori.Context) {
 	if ctx.Err != nil {
-		ctx.Session.ChannelMessageSend(
+		_, _ = ctx.Session.ChannelMessageSend(
 			ctx.Message.ChannelID, ctx.Err.Error())
 	}
 }
