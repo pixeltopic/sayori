@@ -38,6 +38,18 @@ func (m *testOnMsg) Resolve(ctx Context) {
 	m.ResolveCallback(ctx)
 }
 
+type testMiddleware struct{}
+
+func (m *testMiddleware) Do(_ Context) error {
+	return nil
+}
+
+type testMiddleware2 struct{}
+
+func (m *testMiddleware2) Do(_ Context) error {
+	return errors.New("failing middleware")
+}
+
 type testCmd struct {
 	testOnMsg
 	MatchCallback func(toks Toks) (string, bool)
@@ -87,6 +99,7 @@ func testEvent(
 	filter Filter,
 	mockSession *discordgo.Session,
 	incomingMockMessage *discordgo.MessageCreate,
+	middlewares []Middleware,
 ) {
 	r := &Router{
 		Session: mockSession,
@@ -108,7 +121,7 @@ func testEvent(
 		t.Fatal("ResolveCallback cannot be nil")
 	}
 
-	r.makeEvent(event, filter)(mockSession, incomingMockMessage)
+	r.makeEvent(event, filter, middlewares)(mockSession, incomingMockMessage)
 }
 
 func testCommand(
@@ -121,6 +134,7 @@ func testCommand(
 	filter Filter,
 	mockSession *discordgo.Session,
 	incomingMockMessage *discordgo.MessageCreate,
+	middlewares []Middleware,
 ) {
 	r := &Router{
 		Session: mockSession,
@@ -147,7 +161,7 @@ func testCommand(
 		t.Fatal("MatchCallback cannot be nil")
 	}
 
-	r.makeCommand(cmd, filter)(mockSession, incomingMockMessage)
+	r.makeCommand(cmd, filter, middlewares)(mockSession, incomingMockMessage)
 
 }
 
@@ -199,7 +213,7 @@ func TestRouter(t *testing.T) {
 		}
 
 		testEvent(
-			t, parseCallback, handleCallback, resolveCallback, NewFilter(), mockSession, mockMessageCreate)
+			t, parseCallback, handleCallback, resolveCallback, NewFilter(), mockSession, mockMessageCreate, nil)
 	})
 
 	t.Run("test command handling", func(t *testing.T) {
@@ -268,7 +282,123 @@ func TestRouter(t *testing.T) {
 
 		testCommand(
 			t, &testPrefixer{}, parseCallback, handleCallback,
-			resolveCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate)
+			resolveCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate, nil)
+
+	})
+
+	t.Run("test event & command handling with middlewares", func(t *testing.T) {
+		const (
+			testMessage    = `myaliasEcho echo me please! This is a friendly message :)`
+			testMessageLen = len(testMessage)
+			sessionID      = "myID"
+			authorID       = "fakeauthorID"
+			guildID        = "someguildID"
+		)
+
+		mockSession := testMockSession(sessionID)
+		mockMessageCreate := testMockMessageCreate(
+			authorID, false, guildID, testMessage)
+
+		parseCallback := func(toks Toks) (Args, error) { return nil, nil }
+
+		handleCallback := func(ctx Context) error {
+			if ctx.Message.Content != testMessage {
+				t.Fatalf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
+			}
+
+			if ctx.Alias != "myaliasecho" {
+				t.Fatalf("expected ctx.Alias to equal %s, got %s", "myaliasecho", ctx.Alias)
+			}
+
+			return nil
+		}
+
+		matchCallback := func(toks Toks) (string, bool) {
+			if alias, ok := toks.Get(0); ok {
+				isMatch := strings.ToLower(alias) == "myaliasecho"
+				if !isMatch {
+					t.Fatalf("expected alias to be %s, got %s", "myaliasecho", strings.ToLower(alias))
+				}
+
+				// we don't actually need to return the alias as all lowercase, it's up to your implementation
+				return "myaliasecho", isMatch
+			}
+
+			t.Fatal("expected alias to be found in toks")
+			return "", false
+		}
+
+		t.Run("test a middleware for an event which passes", func(t *testing.T) {
+			handleCallback := func(ctx Context) error {
+				if ctx.Message.Content != testMessage {
+					t.Fatalf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
+				}
+
+				if ctx.Alias != "" {
+					t.Fatalf("expected ctx.Alias to be empty, got '%s'", ctx.Alias)
+				}
+
+				return nil
+			}
+
+			resolveCallback := func(ctx Context) {
+				if ctx.Err != nil {
+					t.Fatalf("expected ctx.Err to be nil")
+				}
+			}
+
+			testEvent(
+				t, parseCallback, handleCallback,
+				resolveCallback, NewFilter(), mockSession, mockMessageCreate, []Middleware{&testMiddleware{}})
+		})
+
+		t.Run("test a middleware for an event which fails midway", func(t *testing.T) {
+			handleCallback := func(ctx Context) error {
+				if ctx.Message.Content != testMessage {
+					t.Fatalf("expected ctx.Message.Content to equal '%s', got '%s'", testMessage, ctx.Message.Content)
+				}
+
+				if ctx.Alias != "" {
+					t.Fatalf("expected ctx.Alias to be empty, got '%s'", ctx.Alias)
+				}
+
+				return nil
+			}
+
+			resolveCallback := func(ctx Context) {
+				if ctx.Err == nil {
+					t.Fatalf("expected ctx.Err to be non-nil")
+				}
+			}
+
+			testEvent(
+				t, parseCallback, handleCallback,
+				resolveCallback, NewFilter(), mockSession, mockMessageCreate, []Middleware{&testMiddleware2{}, &testMiddleware{}})
+		})
+
+		t.Run("test a middleware which passes", func(t *testing.T) {
+			resolveCallback := func(ctx Context) {
+				if ctx.Err != nil {
+					t.Fatalf("expected ctx.Err to be nil")
+				}
+			}
+
+			testCommand(
+				t, &testPrefixer{}, parseCallback, handleCallback,
+				resolveCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate, []Middleware{&testMiddleware{}})
+		})
+
+		t.Run("test a middleware which fails midway", func(t *testing.T) {
+			resolveCallback := func(ctx Context) {
+				if ctx.Err == nil {
+					t.Fatalf("expected ctx.Err to be non-nil")
+				}
+			}
+
+			testCommand(
+				t, &testPrefixer{}, parseCallback, handleCallback,
+				resolveCallback, matchCallback, NewFilter(), mockSession, mockMessageCreate, []Middleware{&testMiddleware2{}, &testMiddleware{}})
+		})
 
 	})
 
@@ -337,7 +467,57 @@ func TestRouter(t *testing.T) {
 
 		testCommand(
 			t, &testPrefixer{}, parseCallback, handleCallback,
-			resolveCallback, matchCallback, NewFilter(MessagesGuild, MessagesSelf), mockSession, mockMessageCreate)
+			resolveCallback, matchCallback, NewFilter(MessagesGuild, MessagesSelf), mockSession, mockMessageCreate, nil)
+
+	})
+
+	t.Run("test command handling with filters and middlewares", func(t *testing.T) {
+		const (
+			testMessage    = `myaliasEcho echo me please! This is a friendly message :)`
+			testMessageLen = len(testMessage)
+			alias          = "myaliasEcho"
+			sessionID      = "fakeauthorID"
+			authorID       = "anotherauthorID"
+			guildID        = "someguildID"
+		)
+
+		mockSession := testMockSession(sessionID)
+		mockMessageCreate := testMockMessageCreate(authorID, true, guildID, testMessage)
+
+		parseCallback := func(toks Toks) (Args, error) {
+			return nil, nil
+		}
+
+		handleCallback := func(ctx Context) error {
+			t.Fatal("expected given handleCallback to never execute due to failed middleware")
+			return nil
+		}
+
+		resolveCallback := func(ctx Context) {
+			// test ctx.Alias
+			if ctx.Alias != alias {
+				t.Fatalf("expected ctx.Alias to equal %s, got %s", alias, ctx.Alias)
+			}
+
+			// test ctx.Err for the proper Filter error
+			if ctx.Err == nil {
+				t.Fatal("expected ctx.Err to be non-nil")
+			}
+
+			if ctx.Err.Error() != "failing middleware" {
+				t.Fatalf("expected ctx.Err to be 'failing middleware', got '%s'", ctx.Err.Error())
+			}
+
+		}
+
+		matchCallback := func(toks Toks) (string, bool) {
+			return alias, true
+		}
+
+		testCommand(
+			t, &testPrefixer{}, parseCallback, handleCallback,
+			resolveCallback, matchCallback, NewFilter(MessagesSelf), mockSession, mockMessageCreate,
+			[]Middleware{&testMiddleware{}, &testMiddleware2{}})
 
 	})
 }

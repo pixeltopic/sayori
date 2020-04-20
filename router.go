@@ -7,6 +7,18 @@ import (
 )
 
 type (
+
+	// Middleware allows a custom handler to determine if a message should be routed to the Command or Event handler.
+	//
+	// Do accepts a context and returns an error. If error is nil, will execute the next middleware or the Command or Event handler.
+	// Otherwise, it will renter the Resolve function.
+	//
+	// If context is mutated within the middleware, it may propagate to future handlers.
+	// To be safe, context should be read-only and refrain from using concurrency.
+	Middleware interface {
+		Do(ctx Context) error
+	}
+
 	// Prefixer identifies the prefix based on the guildID before a `Command` execution and removes the prefix of the command string if matched.
 	//
 	// `Load` fetches a prefix that matches the `guildID` and returns the prefix mapped to the `guildID` with an `ok` bool.
@@ -25,13 +37,13 @@ type (
 	}
 
 	// Command is used to handle a command which will only be run on a `*discordgo.MessageCreate` event.
-	// Encapsulates the implementation of both `Event` and `Parseable`.
+	// Encapsulates the implementation of `Event`
+	// Can optionally implement `Parseable`, but is not required.
 	//
 	// `Match` is where a command with a trimmed prefix will be matched an alias. It returns an alias parsed from the command with an `ok` bool.
 	// If `ok` is false, the Command will immediately be terminated.
 	Command interface {
 		Event
-		Parseable
 		Match(toks Toks) (string, bool)
 	}
 
@@ -65,13 +77,13 @@ func New(s *discordgo.Session, p Prefixer) *Router {
 // Command binds a `Command` implementation to the builder.
 func (r *Router) Command(c Command) *Builder {
 	b := &Builder{}
-	return b.command(c)
+	return b.Command(c)
 }
 
 // Event binds an `Event` implementation to the builder.
 func (r *Router) Event(e Event) *Builder {
 	b := &Builder{}
-	return b.event(e)
+	return b.Event(e)
 }
 
 // HandleDefault binds a default discordgo event handler to the builder.
@@ -123,9 +135,9 @@ func (r *Router) Has(b *Builder) {
 
 	switch v := b.handler.(type) {
 	case Command:
-		newHandler = r.makeCommand(v, b.filter)
+		newHandler = r.makeCommand(v, b.filter, b.middlewares)
 	case Event:
-		newHandler = r.makeEvent(v, b.filter)
+		newHandler = r.makeEvent(v, b.filter, b.middlewares)
 	default:
 		newHandler = b.handler
 	}
@@ -143,9 +155,9 @@ func (r *Router) HasOnce(b *Builder) {
 
 	switch v := b.handler.(type) {
 	case Command:
-		newHandler = r.makeCommand(v, b.filter)
+		newHandler = r.makeCommand(v, b.filter, b.middlewares)
 	case Event:
-		newHandler = r.makeEvent(v, b.filter)
+		newHandler = r.makeEvent(v, b.filter, b.middlewares)
 	default:
 		newHandler = b.handler
 	}
@@ -164,26 +176,52 @@ func (r *Router) addHandlerOnce(h interface{}) {
 	}
 }
 
+// handleParse checks if an event implements Parseable; if it does, runs Parseable
+func handleParse(e Event, toks Toks) (Args, error) {
+	var (
+		p  Parseable
+		ok bool
+	)
+	if p, ok = e.(Parseable); !ok {
+		return nil, nil
+	}
+
+	return p.Parse(toks)
+}
+
+// handleMiddlewares runs each middleware in order until it completes unless there is an error.
+func handleMiddlewares(ctx Context, m []Middleware) error {
+	for i := 0; i < len(m); i++ {
+		if err := m[i].Do(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // makeEvent registers a MessageCreate event handler that does not require an alias or prefix
-func (r *Router) makeEvent(e Event, f Filter) func(*discordgo.Session, *discordgo.MessageCreate) {
+func (r *Router) makeEvent(e Event, f Filter, mws []Middleware) func(*discordgo.Session, *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		ctx := NewContext()
 		ctx.Session = s
 		ctx.Message = m.Message
 		ctx.Toks = NewToks(m.Message.Content)
 
-		if p, ok := e.(Parseable); ok {
-			args, err := p.Parse(ctx.Toks)
-			if err != nil {
-				ctx.Err = err
-				defer e.Resolve(ctx)
-				return
-			}
-			ctx.Args = args
+		args, err := handleParse(e, ctx.Toks)
+		if err != nil {
+			ctx.Err = err
+			defer e.Resolve(ctx)
+			return
 		}
+		ctx.Args = args
 
 		ctx.Filter = f
 		if ok, failedFilters := f.allow(ctx); ok {
+			ctx.Err = handleMiddlewares(ctx, mws)
+			if ctx.Err != nil {
+				defer e.Resolve(ctx)
+				return
+			}
 			ctx.Err = e.Handle(ctx)
 		} else {
 			ctx.Err = ctx.filterToErr(failedFilters)
@@ -194,7 +232,7 @@ func (r *Router) makeEvent(e Event, f Filter) func(*discordgo.Session, *discordg
 }
 
 // makeCommand registers a command
-func (r *Router) makeCommand(c Command, f Filter) func(*discordgo.Session, *discordgo.MessageCreate) {
+func (r *Router) makeCommand(c Command, f Filter, mws []Middleware) func(*discordgo.Session, *discordgo.MessageCreate) {
 	var (
 		prefix, alias, cmd string
 		ok                 bool
@@ -220,16 +258,21 @@ func (r *Router) makeCommand(c Command, f Filter) func(*discordgo.Session, *disc
 		ctx.Message = m.Message
 		ctx.Toks = toks
 
-		args, err := c.Parse(ctx.Toks)
+		args, err := handleParse(c, ctx.Toks)
 		if err != nil {
 			ctx.Err = err
 			defer c.Resolve(ctx)
 			return
 		}
 		ctx.Args = args
-		ctx.Filter = f
 
+		ctx.Filter = f
 		if ok, failedFilters := f.allow(ctx); ok {
+			ctx.Err = handleMiddlewares(ctx, mws)
+			if ctx.Err != nil {
+				defer c.Resolve(ctx)
+				return
+			}
 			ctx.Err = c.Handle(ctx)
 		} else {
 			ctx.Err = ctx.filterToErr(failedFilters)

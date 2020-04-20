@@ -17,10 +17,21 @@ var (
 	Token string
 )
 
+const defaultPrefix = "e!"
+
 func init() {
 	flag.StringVar(&Token, "t", "", "Bot Token")
 	flag.Parse()
 }
+
+// Prefix loads a prefix
+type Prefix struct{}
+
+// Load returns the Default prefix no matter what the guildID given is.
+func (p *Prefix) Load(_ string) (string, bool) { return p.Default(), true }
+
+// Default returns the default router prefix
+func (*Prefix) Default() string { return defaultPrefix }
 
 func onDelete(_ *discordgo.Session, d *discordgo.MessageDelete) {
 	log.Printf("A message was deleted: %v, %v, %v", d.Message.ID, d.Message.ChannelID, d.Message.GuildID)
@@ -33,7 +44,7 @@ func main() {
 		return
 	}
 
-	router := sayori.New(dg, &Prefixer{})
+	router := sayori.New(dg, &Prefix{})
 	router.Has(router.Command(&EchoCmd{}))
 
 	router.Has(router.Event(&OnMsg{}).
