@@ -51,7 +51,7 @@ func main() {
 
 	echoColor := sayori.NewRoute(p).Do(&EchoColor{}).On("c", "color")
 	echoFmt := sayori.NewRoute(p).Do(&EchoFmt{}).On("f", "fmt").Has(echoColor)
-	echo := sayori.NewRoute(p).Do(&Echo{}).On("echo", "e").Has(echoFmt)
+	echo := sayori.NewRoute(p).Do(&Echo{}).On("echo", "e").Has(echoFmt, echoColor)
 
 	router.Has(echo)
 	router.Has(echoFmt)
