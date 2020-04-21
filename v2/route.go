@@ -41,7 +41,7 @@ func handleMiddlewares(ctx *context.Context, m []Middlewarer) error {
 // if command is an empty string and prefix is not empty, will return false.
 func trimPrefix(command, prefix string) (string, bool) {
 	var c string
-	if prefix == "" {
+	if prefix == "" && command != "" {
 		return command, true
 	}
 	if command == "" {
@@ -177,6 +177,9 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 		if route == nil {
 			return
 		}
+
+		//fmt.Printf("depth %d, cmd: '%s', args: '%v'\n", depth, cmd, args)
+
 		ctx.Alias = append(ctx.Alias, args[:depth]...)
 		ctx.Args = append(ctx.Args, args[depth:]...)
 

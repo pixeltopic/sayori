@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	v2 "github.com/pixeltopic/sayori/v2"
+	sayori "github.com/pixeltopic/sayori/v2"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -47,13 +47,17 @@ func main() {
 
 	p := &Prefix{}
 
-	router := v2.New(dg)
+	router := sayori.New(dg)
 
-	router.Has(
-		v2.NewRoute(p).Do(&EchoCmd{}).On("echo", "e").Has(
-			v2.NewRoute(nil).Do(&EchoSubCmd{}).On("f", "fmt")))
+	echoColor := sayori.NewRoute(p).Do(&EchoColor{}).On("c", "color")
+	echoFmt := sayori.NewRoute(p).Do(&EchoFmt{}).On("f", "fmt").Has(echoColor)
+	echo := sayori.NewRoute(p).Do(&Echo{}).On("echo", "e").Has(echoFmt)
 
-	router.Has(v2.NewRoute(nil).Do(&OnMsg{}))
+	router.Has(echo)
+	router.Has(echoFmt)
+	router.Has(echoColor)
+
+	router.Has(sayori.NewRoute(nil).Do(&OnMsg{}))
 
 	err = router.Open()
 	if err != nil {
