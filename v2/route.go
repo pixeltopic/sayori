@@ -51,7 +51,7 @@ func trimPrefix(command, prefix string) (string, bool) {
 		return "", false
 	}
 
-	return c, true
+	return c, len(c) != 0 // if command was "[prefix]" and it's trimmed into "" it should be false
 
 }
 
