@@ -7,7 +7,7 @@
 `e!echo` which echoes text following this command. It has the subcommands `fmt` and `color`.
 The subcommand `fmt` also has the subcommand `color`.
 
-This means a commands like so are valid:
+This means commands like so are valid:
 
 ```
 e!echo fmt color blah blah blah
