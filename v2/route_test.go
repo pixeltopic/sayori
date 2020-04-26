@@ -11,6 +11,36 @@ import (
 const testDefaultPrefix = "t!"
 
 type (
+	// testParams helps bootstrap table driven tests.
+	testParams struct {
+		testIOParams []*testIOParams
+		routeParams  *testRouteDefns
+	}
+
+	// testIOParams contains test input-expected outputs.
+	testIOParams struct {
+		sesParams           *mockSesParams
+		msgParams           *mockMsgParams
+		msgContentTokenized []string // msgContent in mockMsgParams, but tokenized
+
+		expectedDepth     int // depth of a subcommand token (zero indexed)
+		expectedPrefix    string
+		expectedAliasTree []string // represents all aliases of the root command and sub command
+		expectedAlias     []string // order sensitive. alias trace generated from the command invocation
+		expectedArgs      []string // order sensitive. args generated from the command invocation
+		expectedErr       error    // error the ctx should contain
+	}
+
+	// testRouteDefns contains definitions to easily bootstrap route setup
+	testRouteDefns struct {
+		c *testCmd
+		p Prefixer
+
+		aliases     []string
+		subroutes   []*testRouteDefns
+		middlewares []Middlewarer
+	}
+
 	// testPrefEmpty defaults the prefix to an empty string.
 	testPrefEmpty struct{}
 
@@ -31,24 +61,6 @@ type (
 	mockMsgParams struct {
 		authorBot                        bool
 		authorID, msgGuildID, msgContent string
-	}
-
-	// testRouteParams helps bootstrap a Route for testing.
-	testRouteParams struct {
-		c *testCmd
-		p Prefixer
-
-		aliases     []string
-		subroutes   []*testRouteParams
-		middlewares []Middlewarer
-	}
-
-	// testParams helps bootstrap table driven tests
-	testParams struct {
-		sesParams *mockSesParams
-		msgParams *mockMsgParams
-
-		routeParams *testRouteParams
 	}
 )
 
@@ -73,7 +85,7 @@ func (c *testCmd) Parse(cmd string) ([]string, error) {
 }
 
 // testMockSes returns a fake discordgo Session with the ID of the session user populated
-func (p *testParams) createMockSes() (*discordgo.Session, error) {
+func (p *testIOParams) createMockSes() (*discordgo.Session, error) {
 	if p.sesParams == nil {
 		return nil, errors.New("p.sesParams is nil")
 	}
@@ -89,7 +101,7 @@ func (p *testParams) createMockSes() (*discordgo.Session, error) {
 	return session, nil
 }
 
-func (p *testParams) createMockMsg() (*discordgo.MessageCreate, error) {
+func (p *testIOParams) createMockMsg() (*discordgo.MessageCreate, error) {
 	if p.msgParams == nil {
 		return nil, errors.New("p.msgParams is nil")
 	}
@@ -107,7 +119,7 @@ func (p *testParams) createMockMsg() (*discordgo.MessageCreate, error) {
 	}, nil
 }
 
-func testCreateRouteHelper(root *testRouteParams) *Route {
+func testCreateRouteHelper(root *testRouteDefns) *Route {
 	r := NewRoute(root.p)
 
 	r.On(root.aliases...)
@@ -138,44 +150,75 @@ func testGetAllAliasRecursively(route *Route) []string {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO: table driven test where messages are in a slice and we have one big testRouteDefns to test?
+// In addition we can test multiple testRouteDefns too
+// Need to find a good way to store expected test results
 func TestRoute(t *testing.T) {
-
-	t.Run("generate a route from params", func(t *testing.T) {
-		tree := &testParams{
-			sesParams: nil,
-			msgParams: nil,
-			routeParams: &testRouteParams{
+	testTrees := []*testParams{
+		{
+			testIOParams: []*testIOParams{
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: "root sub1 sub2 sub3 arg1 arg2",
+					},
+					msgContentTokenized: []string{"root", "sub1", "sub2", "arg3", "arg1", "arg2"},
+					expectedDepth:       2,
+				},
+			},
+			routeParams: &testRouteDefns{
 				c: nil, p: nil, aliases: []string{"root"},
 				middlewares: nil,
-				subroutes: []*testRouteParams{
+				subroutes: []*testRouteDefns{
 					{
 						c: nil, p: nil, aliases: []string{"sub1"},
 						middlewares: nil,
-						subroutes: []*testRouteParams{
+						subroutes: []*testRouteDefns{
 							{
 								c: nil, p: nil, aliases: []string{"subsub1"},
 								middlewares: nil,
-								subroutes:   []*testRouteParams{},
+								subroutes:   []*testRouteDefns{},
 							},
 						},
 					},
 					{
 						c: nil, p: nil, aliases: []string{"sub2"},
 						middlewares: nil,
-						subroutes:   []*testRouteParams{},
+						subroutes:   []*testRouteDefns{},
 					},
 				},
 			},
+		},
+	}
+
+	for _, tt := range testTrees {
+		rr := tt.createRoute()
+
+		for _, io := range tt.testIOParams {
+			t.Run("test findRoute", func(t *testing.T) {
+				found, depth := findRoute(rr, io.msgContentTokenized)
+				if depth != io.expectedDepth {
+					t.Errorf("got %d, want %d", depth, io.expectedDepth)
+				}
+				if found == nil {
+					t.Error("expected non-nil route")
+				}
+			})
 		}
+	}
+	t.Run("generate a route from params", func(t *testing.T) {
 
 		// do tests here after generating a route from testParams.RouteParams
-		r := tree.createRoute()
-
-		expected := testGetAllAliasRecursively(r)
-
-		if len(expected) != 4 {
-			t.FailNow()
-		}
+		//r := tree.createRoute()
+		//
+		//expected := testGetAllAliasRecursively(r)
+		//
+		//if len(expected) != 4 {
+		//	t.FailNow()
+		//}
 		//if !r.HasAlias("root") {
 		//	t.FailNow()
 		//}
