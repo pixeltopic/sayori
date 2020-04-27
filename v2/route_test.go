@@ -2,6 +2,8 @@ package v2
 
 import (
 	"errors"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -24,7 +26,7 @@ type (
 		msgContentTokenized []string // msgContent in mockMsgParams, but tokenized
 
 		expectedDepth     int // depth of a subcommand token (zero indexed)
-		expectedPrefix    string
+		expectedPrefix    *string
 		expectedAliasTree []string // represents all aliases of the root command and sub command
 		expectedAlias     []string // order sensitive. alias trace generated from the command invocation
 		expectedArgs      []string // order sensitive. args generated from the command invocation
@@ -72,16 +74,88 @@ func (p *testPref) Load(_ string) (string, bool) { return p.Default(), false }
 
 func (*testPref) Default() string { return testDefaultPrefix }
 
-func (c *testCmd) Handle(ctx *context.Context) error { return c.HandleCallback(ctx) }
-
-func (c *testCmd) Resolve(ctx *context.Context) { c.ResolveCallback(ctx) }
-
-// Parse parses a command. If ParseCallback is nil, will default to strings.Fields
-func (c *testCmd) Parse(cmd string) ([]string, error) {
-	if c.ParseCallback == nil {
-		return cmdParserDefault(cmd), nil
+func (c *testCmd) Handle(ctx *context.Context) error {
+	if c.HandleCallback != nil {
+		return c.HandleCallback(ctx)
 	}
-	return c.ParseCallback(cmd)
+	return nil
+}
+
+func (c *testCmd) Resolve(ctx *context.Context) {
+	if c.ResolveCallback != nil {
+		c.ResolveCallback(ctx)
+	}
+}
+
+//Parse parses a command. If ParseCallback is nil, will default to strings.Fields
+func (c *testCmd) Parse(cmd string) ([]string, error) {
+	if c.ParseCallback != nil {
+		return c.ParseCallback(cmd)
+	}
+	return cmdParserDefault(cmd), nil
+}
+
+func (p *testIOParams) createCmd(t *testing.T) *testCmd {
+	testFunc := func(ctx *context.Context) {
+		if ctx.Prefix == nil {
+			if p.expectedPrefix != nil {
+				t.Error("prefix was nil but expected was not")
+			}
+		} else {
+			if p.expectedPrefix == nil {
+				t.Error("prefix was non-nil but expected was not")
+			} else {
+				if *ctx.Prefix != *p.expectedPrefix {
+					t.Errorf("expected prefix to be equal, got %s, want %s", *ctx.Prefix, *p.expectedPrefix)
+				}
+			}
+		}
+
+		if !strSliceEqual(p.expectedAlias, ctx.Alias, false) {
+			t.Error("expected alias to be equal")
+		}
+		if !strSliceEqual(p.expectedArgs, ctx.Args, false) {
+			t.Error("expected args to be equal")
+		}
+	}
+	handleCB := func(ctx *context.Context) error {
+		testFunc(ctx)
+		return p.expectedErr
+	}
+
+	resolveCB := func(ctx *context.Context) {
+		testFunc(ctx)
+		if ctx.Err != p.expectedErr {
+			t.Errorf("expected err to be equal, got %v, want %v", ctx.Err, p.expectedErr)
+		}
+	}
+
+	return &testCmd{
+		HandleCallback:  handleCB,
+		ResolveCallback: resolveCB,
+		ParseCallback:   func(cmd string) ([]string, error) { return cmdParserDefault(cmd), nil },
+	}
+}
+
+// strSliceEqual is a helper function to ensure that 2 string slices are equal.
+// if sorted true, will copy the slice and sort before comparing
+func strSliceEqual(a, b []string, sorted bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	aCopy := make([]string, len(a))
+	bCopy := make([]string, len(b))
+
+	copy(aCopy, a)
+	copy(bCopy, b)
+
+	if sorted {
+		sort.Strings(aCopy)
+		sort.Strings(bCopy)
+	}
+
+	return reflect.DeepEqual(aCopy, bCopy)
 }
 
 // testMockSes returns a fake discordgo Session with the ID of the session user populated
@@ -119,15 +193,20 @@ func (p *testIOParams) createMockMsg() (*discordgo.MessageCreate, error) {
 	}, nil
 }
 
-func testCreateRouteHelper(root *testRouteDefns) *Route {
+func testCreateRouteHelper(root *testRouteDefns, cmd *testCmd) *Route {
 	r := NewRoute(root.p)
 
 	r.On(root.aliases...)
 	r.Use(root.middlewares...)
-	r.Do(root.c)
+
+	if cmd == nil {
+		r.Do(root.c)
+	} else {
+		r.Do(cmd)
+	}
 
 	for _, sr := range root.subroutes {
-		r.Has(testCreateRouteHelper(sr))
+		r.Has(testCreateRouteHelper(sr, cmd))
 	}
 
 	return r
@@ -136,7 +215,15 @@ func testCreateRouteHelper(root *testRouteDefns) *Route {
 
 // createRoute creates a route and ALL its subroutes recursively
 func (p *testParams) createRoute() *Route {
-	return testCreateRouteHelper(p.routeParams)
+	return testCreateRouteHelper(p.routeParams, nil)
+}
+
+// createRoute creates a route and ALL its subroutes recursively
+// but generates a cmd from testIOParams to internally check the expected values.
+// despite all routes/subroutes having the same handler it should be fine because
+// the algorithm should find the deepest subcommand and run that handler.
+func (p *testParams) createRouteWithTestIOParams(testIO *testIOParams, t *testing.T) *Route {
+	return testCreateRouteHelper(p.routeParams, testIO.createCmd(t))
 }
 
 func testGetAllAliasRecursively(route *Route) []string {
@@ -154,6 +241,7 @@ func testGetAllAliasRecursively(route *Route) []string {
 // In addition we can test multiple testRouteDefns too
 // Need to find a good way to store expected test results
 func TestRoute(t *testing.T) {
+	var emptyStr = ""
 	testTrees := []*testParams{
 		{
 			testIOParams: []*testIOParams{
@@ -163,10 +251,15 @@ func TestRoute(t *testing.T) {
 						authorBot:  false,
 						authorID:   "author_id_1",
 						msgGuildID: "guild_id_1",
-						msgContent: "root sub1 sub2 sub3 arg1 arg2",
+						msgContent: "root sub1 subsub1 sub2 arg1 arg2",
 					},
-					msgContentTokenized: []string{"root", "sub1", "sub2", "arg3", "arg1", "arg2"},
-					expectedDepth:       2,
+					msgContentTokenized: []string{"root", "sub1", "subsub1", "sub2", "arg1", "arg2"},
+					expectedDepth:       3,
+					expectedAliasTree:   []string{"root", "sub1", "sub2", "subsub1"},
+					expectedPrefix:      &emptyStr,
+					expectedAlias:       []string{"root", "sub1", "subsub1"},
+					expectedArgs:        []string{"sub2", "arg1", "arg2"},
+					expectedErr:         nil,
 				},
 			},
 			routeParams: &testRouteDefns{
@@ -195,10 +288,33 @@ func TestRoute(t *testing.T) {
 	}
 
 	for _, tt := range testTrees {
-		rr := tt.createRoute()
-
 		for _, io := range tt.testIOParams {
-			t.Run("test findRoute", func(t *testing.T) {
+			t.Run("test handler func", func(t *testing.T) {
+				rr := tt.createRouteWithTestIOParams(io, t)
+				ctx := context.New()
+				msgCreate, err := io.createMockMsg()
+				if err != nil {
+					t.FailNow()
+				}
+				ctx.Msg = msgCreate.Message
+
+				ses, err := io.createMockSes()
+				if err != nil {
+					t.FailNow()
+				}
+				ctx.Ses = ses
+
+				rr.handler(ctx)
+			})
+
+			t.Run("test that all aliases in the route tree are present", func(t *testing.T) {
+				rr := tt.createRoute()
+				if !strSliceEqual(io.expectedAliasTree, testGetAllAliasRecursively(rr), true) {
+					t.Error("expected alias tree to be equal")
+				}
+			})
+			t.Run("test findRoute algorithm", func(t *testing.T) {
+				rr := tt.createRoute()
 				found, depth := findRoute(rr, io.msgContentTokenized)
 				if depth != io.expectedDepth {
 					t.Errorf("got %d, want %d", depth, io.expectedDepth)
@@ -209,28 +325,4 @@ func TestRoute(t *testing.T) {
 			})
 		}
 	}
-	t.Run("generate a route from params", func(t *testing.T) {
-
-		// do tests here after generating a route from testParams.RouteParams
-		//r := tree.createRoute()
-		//
-		//expected := testGetAllAliasRecursively(r)
-		//
-		//if len(expected) != 4 {
-		//	t.FailNow()
-		//}
-		//if !r.HasAlias("root") {
-		//	t.FailNow()
-		//}
-		//if subr := r.Find("sub1"); subr != nil {
-		//	if subr.Find("subsub1") == nil {
-		//		t.FailNow()
-		//	}
-		//} else {
-		//	t.FailNow()
-		//}
-		//if r.Find("sub2") == nil {
-		//	t.FailNow()
-		//}
-	})
 }
