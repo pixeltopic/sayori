@@ -207,26 +207,31 @@ func NewRoute(p Prefixer) *Route {
 }
 
 // findRoute finds the deepest subroute and returns it along with the depth.
+// a depth of zero means there is no route that matches provided args
+// the value of depth is equal to the number of aliases.
 func findRoute(route *Route, args []string) (*Route, int) {
-	depth := 0
-	for ; len(args) > 0; depth++ {
-		alias := args[0]
-		if !route.HasAlias(alias) {
-			if depth == 0 {
-				return nil, depth // no match with top level alias, so do not execute any command
-			}
+	var depth int
+
+	if len(args) == 0 || route == nil {
+		return nil, depth
+	}
+
+	if !route.HasAlias(args[0]) {
+		return nil, depth
+	}
+
+	for depth = 1; depth < len(args); depth++ {
+
+		// finds a subroute matching the token from a given route; if no match returns nil
+		subroute := route.Find(args[depth])
+
+		if subroute == nil {
 			return route, depth
 		}
 
-		args = args[1:]
-		if len(args) > 0 {
-			subroute := route.Find(args[0])
-			if subroute != nil {
-				route = subroute
-			} else {
-				return route, depth + 1
-			}
-		}
+		// we can keep looking deeper.
+		route = subroute
 	}
+
 	return route, depth
 }
