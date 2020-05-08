@@ -128,9 +128,12 @@ func (p *testIOParams) createCmd(t *testing.T) *testCmd {
 	}
 
 	resolveCB := func(ctx *context.Context) {
-		testFunc(ctx)
 		if ctx.Err != p.expectedErr {
 			t.Errorf("expected err to be equal, got %v, want %v", ctx.Err, p.expectedErr)
+		}
+		if ctx.Err == nil && ctx.Err == p.expectedErr {
+			// fields here will only be valid if err was nil (this will not be run, if say - a parser or middleware err'd
+			testFunc(ctx)
 		}
 	}
 
