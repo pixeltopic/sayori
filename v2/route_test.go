@@ -30,6 +30,22 @@ func TestRoute(t *testing.T) {
 					expectedArgs:        []string{"sub2", "arg1", "arg2"},
 					expectedErr:         nil,
 				},
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: "root",
+					},
+					msgContentTokenized: []string{"root"},
+					expectedDepth:       1,
+					expectedAliasTree:   []string{"root", "sub1", "sub2", "subsub1"},
+					expectedPrefix:      &emptyStr,
+					expectedAlias:       []string{"root"},
+					expectedArgs:        []string{},
+					expectedErr:         nil,
+				},
 			},
 			routeParams: &testRouteDefns{
 				c: nil, p: nil, aliases: []string{"root"},
