@@ -63,24 +63,121 @@ func TestRoute(t *testing.T) {
 				},
 			},
 			routeParams: &testRouteDefns{
-				c: nil, p: nil, aliases: []string{"root"},
+				aliases:     []string{"root"},
 				middlewares: nil,
 				subroutes: []*testRouteDefns{
 					{
-						c: nil, p: nil, aliases: []string{"sub1"},
+						aliases:     []string{"sub1"},
 						middlewares: nil,
 						subroutes: []*testRouteDefns{
 							{
-								c: nil, p: nil, aliases: []string{"subsub1"},
+								aliases:     []string{"subsub1"},
 								middlewares: nil,
 								subroutes:   []*testRouteDefns{},
 							},
 						},
 					},
 					{
-						c: nil, p: nil, aliases: []string{"sub2"},
+						aliases:     []string{"sub2"},
 						middlewares: nil,
 						subroutes:   []*testRouteDefns{},
+					},
+				},
+			},
+		},
+		{
+			testIOParams: []*testIOParams{
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: testDefaultPrefix + "root s subsub3 sub arg1 arg2",
+					},
+					msgContentTokenized: []string{"root", "s", "subsub3", "sub", "arg1", "arg2"},
+					expectedDepth:       3,
+					expectedAliasTree:   []string{"root", "sub", "sub1", "s", "subsub1", "ss1", "subsub2", "subsub3", "sub"},
+					expectedPrefix:      testDefaultPrefix,
+					expectedAlias:       []string{"root", "s", "subsub3"},
+					expectedArgs:        []string{"sub", "arg1", "arg2"},
+					expectedErr:         nil,
+				},
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: testDefaultPrefix + "root sub sub sub arg1 arg2",
+					},
+					msgContentTokenized: []string{"root", "sub", "sub", "sub", "arg1", "arg2"},
+					expectedDepth:       3,
+					expectedAliasTree:   []string{"root", "sub", "sub1", "s", "subsub1", "ss1", "subsub2", "subsub3", "sub"},
+					expectedPrefix:      testDefaultPrefix,
+					expectedAlias:       []string{"root", "sub", "sub"},
+					expectedArgs:        []string{"sub", "arg1", "arg2"},
+					expectedErr:         nil,
+				},
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: testDefaultPrefix + "root s sub",
+					},
+					msgContentTokenized: []string{"root", "s", "sub"},
+					expectedDepth:       3,
+					expectedAliasTree:   []string{"root", "sub", "sub1", "s", "subsub1", "ss1", "subsub2", "subsub3", "sub"},
+					expectedPrefix:      testDefaultPrefix,
+					expectedAlias:       []string{"root", "s", "sub"},
+					expectedArgs:        []string{},
+					expectedErr:         nil,
+				},
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: testDefaultPrefix + "s",
+					},
+					msgContentTokenized: []string{"s"},
+					expectedDepth:       0,
+					expectedAliasTree:   []string{"root", "sub", "sub1", "s", "subsub1", "ss1", "subsub2", "subsub3", "sub"},
+					expectedPrefix:      "",
+					expectedAlias:       []string{},
+					expectedArgs:        []string{},
+					expectedErr:         nil,
+				},
+			},
+			routeParams: &testRouteDefns{
+				p:           &testPref{},
+				aliases:     []string{"root"},
+				middlewares: nil,
+				subroutes: []*testRouteDefns{
+					{
+						p:           &testPref{},
+						aliases:     []string{"sub", "sub1", "s"},
+						middlewares: nil,
+						subroutes: []*testRouteDefns{
+							{
+								aliases:     []string{"subsub1", "ss1"},
+								middlewares: nil,
+								subroutes:   []*testRouteDefns{},
+							},
+							{
+								aliases:     []string{"subsub2"},
+								middlewares: nil,
+								subroutes:   []*testRouteDefns{},
+							},
+							{
+								aliases:     []string{"subsub3", "sub"},
+								middlewares: nil,
+								subroutes:   []*testRouteDefns{},
+							},
+						},
 					},
 				},
 			},
@@ -109,8 +206,9 @@ func TestRoute(t *testing.T) {
 
 			t.Run("test that all aliases in the route tree are present", func(t *testing.T) {
 				rr := tt.createRoute()
-				if !strSliceEqual(io.expectedAliasTree, testGetAllAliasRecursively(rr), true) {
-					t.Error("expected alias tree to be equal")
+				found := testGetAllAliasRecursively(rr)
+				if !strSliceEqual(io.expectedAliasTree, found, true) {
+					t.Errorf("expected alias tree to be equal; got %v, want %v", found, io.expectedAliasTree)
 				}
 			})
 			t.Run("test findRoute algorithm", func(t *testing.T) {
@@ -119,7 +217,7 @@ func TestRoute(t *testing.T) {
 				if depth != io.expectedDepth {
 					t.Errorf("got %d, want %d", depth, io.expectedDepth)
 				}
-				if found == nil {
+				if found == nil && io.expectedDepth != 0 {
 					t.Error("expected non-nil route")
 				}
 			})
