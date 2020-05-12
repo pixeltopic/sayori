@@ -10,6 +10,24 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+func trimmer(message, prefix string, alias []string) string {
+	toTrim := prefix + strings.Join(alias, " ")
+
+	message = strings.Join(strings.Fields(message), " ")
+
+	s := strings.TrimSpace(strings.TrimPrefix(message, toTrim))
+
+	if len(s) >= 2 &&
+		strings.HasPrefix(s, "\"") &&
+		strings.HasSuffix(s, "\"") {
+
+		return strings.TrimPrefix(strings.TrimSuffix(s, "\""), "\"")
+	}
+
+	return s
+
+}
+
 // Echo defines a simple EchoCmd.
 type Echo struct{}
 
@@ -21,8 +39,7 @@ func (*Echo) Handle(ctx *context.Context) error {
 	}
 
 	_, _ = ctx.Ses.ChannelMessageSend(
-		ctx.Msg.ChannelID, "Echoing! "+strings.TrimSpace(strings.TrimPrefix(
-			ctx.Msg.Content, *ctx.Prefix+ctx.Alias[len(ctx.Alias)-1])))
+		ctx.Msg.ChannelID, "Echoing! "+trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias))
 
 	return nil
 }
@@ -44,12 +61,13 @@ func (*EchoFmt) Handle(ctx *context.Context) error {
 		return errors.New("nothing to format echo")
 	}
 
-	toTrim := *ctx.Prefix + strings.Join(ctx.Alias, " ")
-
 	_, _ = ctx.Ses.ChannelMessageSendEmbed(
 		ctx.Msg.ChannelID, &discordgo.MessageEmbed{
-			Description: fmt.Sprintf(`"%s" - %s#%s`, strings.TrimSpace(strings.TrimPrefix(
-				ctx.Msg.Content, toTrim)), ctx.Msg.Author.Username, ctx.Msg.Author.Discriminator),
+			Description: fmt.Sprintf(`"%s" - %s#%s`,
+				trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias),
+				ctx.Msg.Author.Username,
+				ctx.Msg.Author.Discriminator,
+			),
 		})
 
 	return nil
@@ -72,8 +90,6 @@ func (*EchoColor) Handle(ctx *context.Context) error {
 		return errors.New("nothing to color echo")
 	}
 
-	toTrim := *ctx.Prefix + strings.Join(ctx.Alias, " ")
-
 	codeBlockWrap := "```"
 
 	msgContent := fmt.Sprintf(`
@@ -82,7 +98,7 @@ func (*EchoColor) Handle(ctx *context.Context) error {
 %s 
 - %s#%s`,
 		codeBlockWrap,
-		strings.TrimSpace(strings.TrimPrefix(ctx.Msg.Content, toTrim)),
+		trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias),
 		codeBlockWrap,
 		ctx.Msg.Author.Username,
 		ctx.Msg.Author.Discriminator,
