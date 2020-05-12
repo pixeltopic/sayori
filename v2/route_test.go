@@ -10,7 +10,6 @@ import (
 // In addition we can test multiple testRouteDefns too
 // Need to find a good way to store expected test results
 func TestRoute(t *testing.T) {
-	var emptyStr = ""
 	testTrees := []*testParams{
 		{
 			testIOParams: []*testIOParams{
@@ -25,7 +24,7 @@ func TestRoute(t *testing.T) {
 					msgContentTokenized: []string{"root", "sub1", "subsub1", "sub2", "arg1", "arg2"},
 					expectedDepth:       3,
 					expectedAliasTree:   []string{"root", "sub1", "sub2", "subsub1"},
-					expectedPrefix:      &emptyStr,
+					expectedPrefix:      "",
 					expectedAlias:       []string{"root", "sub1", "subsub1"},
 					expectedArgs:        []string{"sub2", "arg1", "arg2"},
 					expectedErr:         nil,
@@ -41,7 +40,7 @@ func TestRoute(t *testing.T) {
 					msgContentTokenized: []string{"root"},
 					expectedDepth:       1,
 					expectedAliasTree:   []string{"root", "sub1", "sub2", "subsub1"},
-					expectedPrefix:      &emptyStr,
+					expectedPrefix:      "",
 					expectedAlias:       []string{"root"},
 					expectedArgs:        []string{},
 					expectedErr:         nil,
@@ -57,7 +56,7 @@ func TestRoute(t *testing.T) {
 					msgContentTokenized: []string{"root", "sub2"},
 					expectedDepth:       2,
 					expectedAliasTree:   []string{"root", "sub1", "sub2", "subsub1"},
-					expectedPrefix:      &emptyStr,
+					expectedPrefix:      "",
 					expectedAlias:       []string{"root", "sub2"},
 					expectedArgs:        []string{},
 					expectedErr:         nil,

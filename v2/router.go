@@ -7,13 +7,13 @@ import (
 
 // Router maps commands to handlers.
 type Router struct {
-	*discordgo.Session
+	S *discordgo.Session
 }
 
 // New returns a new Router.
 func New(s *discordgo.Session) *Router {
 	return &Router{
-		Session: s,
+		S: s,
 	}
 }
 
@@ -63,13 +63,24 @@ func (r *Router) HasOnce(route *Route) {
 }
 
 func (r *Router) addHandler(h interface{}) {
-	if r.Session != nil && h != nil {
-		r.AddHandler(h)
+	if r.S != nil && h != nil {
+		r.S.AddHandler(h)
 	}
 }
 
 func (r *Router) addHandlerOnce(h interface{}) {
-	if r.Session != nil && h != nil {
-		r.AddHandlerOnce(h)
+	if r.S != nil && h != nil {
+		r.S.AddHandlerOnce(h)
 	}
+}
+
+// Open creates a websocket connection to Discord.
+// See: https://discordapp.com/developers/docs/topics/gateway#connecting
+func (r *Router) Open() error {
+	return r.S.Open()
+}
+
+// Close closes a websocket and stops all listening/heartbeat goroutines.
+func (r *Router) Close() error {
+	return r.S.Close()
 }

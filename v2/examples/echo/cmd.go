@@ -39,7 +39,7 @@ func (*Echo) Handle(ctx *context.Context) error {
 	}
 
 	_, _ = ctx.Ses.ChannelMessageSend(
-		ctx.Msg.ChannelID, "Echoing! "+trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias))
+		ctx.Msg.ChannelID, "Echoing! "+trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias))
 
 	return nil
 }
@@ -64,7 +64,7 @@ func (*EchoFmt) Handle(ctx *context.Context) error {
 	_, _ = ctx.Ses.ChannelMessageSendEmbed(
 		ctx.Msg.ChannelID, &discordgo.MessageEmbed{
 			Description: fmt.Sprintf(`"%s" - %s#%s`,
-				trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias),
+				trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias),
 				ctx.Msg.Author.Username,
 				ctx.Msg.Author.Discriminator,
 			),
@@ -98,7 +98,7 @@ func (*EchoColor) Handle(ctx *context.Context) error {
 %s 
 - %s#%s`,
 		codeBlockWrap,
-		trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias),
+		trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias),
 		codeBlockWrap,
 		ctx.Msg.Author.Username,
 		ctx.Msg.Author.Discriminator,
