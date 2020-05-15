@@ -10,12 +10,15 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// trimmer removes the prefix from a message and removes quotes if present
 func trimmer(message, prefix string, alias []string) string {
-	toTrim := prefix + strings.Join(alias, " ")
 
-	message = strings.Join(strings.Fields(message), " ")
+	message = strings.Replace(message, prefix, "", 1)
+	for _, a := range alias {
+		message = strings.Replace(message, a, "", 1)
+	}
 
-	s := strings.TrimSpace(strings.TrimPrefix(message, toTrim))
+	s := strings.TrimSpace(message)
 
 	if len(s) >= 2 &&
 		strings.HasPrefix(s, "\"") &&
