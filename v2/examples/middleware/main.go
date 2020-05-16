@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/pixeltopic/sayori/v2/filter"
+
 	"github.com/pixeltopic/sayori/v2/context"
 
 	"github.com/bwmarrin/discordgo"
@@ -35,11 +37,26 @@ func (p *Prefix) Load(_ string) (string, bool) { return p.Default(), true }
 // Default returns the default router prefix
 func (*Prefix) Default() string { return defaultPrefix }
 
-// Validator validates if a user has admin privilege
-type Validator struct{}
+// Filter will filter out invocations from a private DM channel
+type Filter struct{}
+
+// Do a check for valid invocation context
+func (*Filter) Do(ctx *context.Context) error {
+	f := filter.New(filter.MsgIsPrivate)
+
+	valid, _ := f.Validate(ctx)
+	if !valid {
+		return errors.New("invalid channel :(")
+	}
+
+	return nil
+}
+
+// Validate validates if a user has admin privilege
+type Validate struct{}
 
 // Do a check for valid permissions
-func (*Validator) Do(ctx *context.Context) error {
+func (*Validate) Do(ctx *context.Context) error {
 	aPerm, err := ctx.Ses.State.UserChannelPermissions(
 		ctx.Msg.Author.ID, ctx.Msg.ChannelID)
 	if err != nil {
@@ -82,7 +99,7 @@ func main() {
 		v2.NewRoute(&Prefix{}).
 			On("p", "priv", "privileged").
 			Do(&Privilege{}).
-			Use(&Validator{}),
+			Use(&Filter{}, &Validate{}),
 	)
 
 	err = router.Open()
