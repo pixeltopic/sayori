@@ -9,7 +9,7 @@ import (
 type Context struct {
 	Ses    *discordgo.Session
 	Msg    *discordgo.Message
-	Prefix *string
+	Prefix string
 	Alias  []string
 	Args   []string
 	Err    error
@@ -18,11 +18,7 @@ type Context struct {
 // New returns a new Context.
 func New() *Context {
 	return &Context{
-		Ses:    nil,
-		Msg:    nil,
-		Prefix: nil,
-		Alias:  []string{},
-		Args:   []string{},
-		Err:    nil,
+		Alias: []string{},
+		Args:  []string{},
 	}
 }

@@ -10,12 +10,15 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// trimmer removes the prefix from a message and removes quotes if present
 func trimmer(message, prefix string, alias []string) string {
-	toTrim := prefix + strings.Join(alias, " ")
 
-	message = strings.Join(strings.Fields(message), " ")
+	message = strings.Replace(message, prefix, "", 1)
+	for _, a := range alias {
+		message = strings.Replace(message, a, "", 1)
+	}
 
-	s := strings.TrimSpace(strings.TrimPrefix(message, toTrim))
+	s := strings.TrimSpace(message)
 
 	if len(s) >= 2 &&
 		strings.HasPrefix(s, "\"") &&
@@ -39,7 +42,7 @@ func (*Echo) Handle(ctx *context.Context) error {
 	}
 
 	_, _ = ctx.Ses.ChannelMessageSend(
-		ctx.Msg.ChannelID, "Echoing! "+trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias))
+		ctx.Msg.ChannelID, "Echoing! "+trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias))
 
 	return nil
 }
@@ -64,7 +67,7 @@ func (*EchoFmt) Handle(ctx *context.Context) error {
 	_, _ = ctx.Ses.ChannelMessageSendEmbed(
 		ctx.Msg.ChannelID, &discordgo.MessageEmbed{
 			Description: fmt.Sprintf(`"%s" - %s#%s`,
-				trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias),
+				trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias),
 				ctx.Msg.Author.Username,
 				ctx.Msg.Author.Discriminator,
 			),
@@ -98,7 +101,7 @@ func (*EchoColor) Handle(ctx *context.Context) error {
 %s 
 - %s#%s`,
 		codeBlockWrap,
-		trimmer(ctx.Msg.Content, *ctx.Prefix, ctx.Alias),
+		trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias),
 		codeBlockWrap,
 		ctx.Msg.Author.Username,
 		ctx.Msg.Author.Discriminator,

@@ -132,9 +132,9 @@ func (r *Route) Use(middlewares ...Middlewarer) *Route {
 // Do composes a commander implementation into a CtxHandler
 //
 // if cmd is nil, will no-op
-func (r *Route) Do(cmd Commander) *Route {
-	r.c = cmd
-	r.handler = r.createHandlerFunc()
+func (r *Route) Do(c Commander) *Route {
+	r.c = c
+	r.handler = r.createHandlerFunc(c)
 
 	return r
 }
@@ -143,33 +143,28 @@ func (r *Route) Do(cmd Commander) *Route {
 // with an accumulated context
 //
 // ctx must contain the session and message.
-func (r *Route) createHandlerFunc() HandlerFunc {
+func (r *Route) createHandlerFunc(c Commander) HandlerFunc {
 
-	if r.c == nil {
+	if c == nil {
 		return nil
 	}
 
 	return func(ctx *context.Context) {
 		var (
-			//alias string
 			ok  bool
 			cmd = ctx.Msg.Content
 		)
 
-		// only do this if we are at a top level command
-		// must compare with nil because Events have empty string prefixes
-		if ctx.Prefix == nil {
-			prefix := r.getGuildPrefix(ctx.Msg.GuildID)
-			ctx.Prefix = &prefix
-			if cmd, ok = trimPrefix(cmd, *ctx.Prefix); !ok {
-				return
-			}
+		prefix := r.getGuildPrefix(ctx.Msg.GuildID)
+		ctx.Prefix = prefix
+		if cmd, ok = trimPrefix(cmd, ctx.Prefix); !ok {
+			return
 		}
 
-		args, err := handleParse(r.c, cmd)
+		args, err := handleParse(c, cmd)
 		if err != nil {
 			ctx.Err = err
-			r.c.Resolve(ctx)
+			c.Resolve(ctx)
 			return
 		}
 
@@ -177,8 +172,6 @@ func (r *Route) createHandlerFunc() HandlerFunc {
 		if route == nil {
 			return
 		}
-
-		//fmt.Printf("depth %d, cmd: '%s', args: '%v'\n", depth, cmd, args)
 
 		ctx.Alias = append(ctx.Alias, args[:depth]...)
 		ctx.Args = append(ctx.Args, args[depth:]...)
@@ -220,6 +213,7 @@ func findRoute(route *Route, args []string) (*Route, int) {
 		return nil, depth
 	}
 
+	// note: depth is incremented even if depth < len(args) except on the initial entry
 	for depth = 1; depth < len(args); depth++ {
 
 		// finds a subroute matching the token from a given route; if no match returns nil

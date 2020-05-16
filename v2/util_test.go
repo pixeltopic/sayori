@@ -26,7 +26,7 @@ type (
 		msgContentTokenized []string // msgContent in mockMsgParams, but tokenized
 
 		expectedDepth     int // depth of a subcommand token (zero indexed)
-		expectedPrefix    *string
+		expectedPrefix    string
 		expectedAliasTree []string // represents all aliases of the root command and sub command
 		expectedAlias     []string // order sensitive. alias trace generated from the command invocation
 		expectedArgs      []string // order sensitive. args generated from the command invocation
@@ -97,18 +97,9 @@ func (c *testCmd) Parse(cmd string) ([]string, error) {
 
 func (p *testIOParams) createCmd(t *testing.T) *testCmd {
 	testFunc := func(ctx *context.Context) {
-		if ctx.Prefix == nil {
-			if p.expectedPrefix != nil {
-				t.Error("prefix was nil but expected was not")
-			}
-		} else {
-			if p.expectedPrefix == nil {
-				t.Error("prefix was non-nil but expected was not")
-			} else {
-				if *ctx.Prefix != *p.expectedPrefix {
-					t.Errorf("expected prefix to be equal, got %s, want %s", *ctx.Prefix, *p.expectedPrefix)
-				}
-			}
+
+		if ctx.Prefix != p.expectedPrefix {
+			t.Errorf("expected prefix to be equal, got %s, want %s", ctx.Prefix, p.expectedPrefix)
 		}
 
 		if p.expectedDepth != len(ctx.Alias) {
