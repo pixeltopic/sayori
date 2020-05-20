@@ -15,12 +15,12 @@ type OnMsg struct {
 }
 
 // Handle will run on a MessageCreate event.
-func (m *OnMsg) Handle(_ *context.Context) error {
+func (m *OnMsg) Handle(ctx *context.Context) error {
 	m.Lock()
 	defer m.Unlock()
 
 	m.totalSent++
-	log.Printf("Message count: %d\n", m.totalSent)
+	log.Printf("Message count: %d, args: %v\n", m.totalSent, ctx.Args)
 	return nil
 }
 
