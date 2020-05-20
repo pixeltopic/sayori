@@ -10,8 +10,8 @@ type (
 		Parse(string) ([]string, error)
 	}
 
-	// handlerFunc executes when a root Route is invoked.
-	// A root route is any Route that is added to the router via Has
+	// handlerFunc executes when a root route is invoked.
+	// A root route is any route that is added to the router via Has
 	handlerFunc func(ctx *context.Context)
 
 	// Middlewarer allows execution of a handler before Handle is executed.
@@ -35,7 +35,7 @@ type (
 		Default() string
 	}
 
-	// Commander is used by a Route to handle Discord's Message Create events.
+	// Commander is used by a route to handle Discord's Message Create events.
 	// https://discord.com/developers/docs/topics/gateway#message-create
 	//
 	// Can optionally implement CmdParser, but is not required.

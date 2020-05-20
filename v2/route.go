@@ -64,8 +64,12 @@ type Route struct {
 	middlewares []Middlewarer
 }
 
-// IsDefault returns true if a route will always be executed when discord produces a Message Create event
+// IsDefault returns true if a route will always be executed when Discord produces a Message Create event
+// with respect to the Prefixer (if provided).
+//
 // https://discord.com/developers/docs/topics/gateway#message-create
+//
+// A default route will only be executed if it is not a subroute. Any subroutes it might contain will be ignored.
 func (r *Route) IsDefault() bool {
 	return len(r.aliases) == 0
 }
