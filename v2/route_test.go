@@ -293,7 +293,7 @@ func TestRoute(t *testing.T) {
 				}
 				ctx.Ses = ses
 
-				rr.handler(ctx)
+				createHandlerFunc(rr)(ctx)
 			})
 
 			t.Run("test that all aliases in the route tree are present", func(t *testing.T) {

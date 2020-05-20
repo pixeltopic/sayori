@@ -57,11 +57,9 @@ func trimPrefix(command, prefix string) (string, bool) {
 
 // Route represents a command.
 type Route struct {
-	c Commander
-	p Prefixer
-
+	c           Commander
+	p           Prefixer
 	aliases     []string
-	handler     HandlerFunc // handler func is only executed on the top level if a route is not a subroute. if subroute, directly accesses handle/resolve
 	subroutes   []*Route
 	middlewares []Middlewarer
 }
@@ -144,20 +142,35 @@ func (r *Route) Use(middlewares ...Middlewarer) *Route {
 // If Do is called multiple times, the previous Do call will be overwritten.
 func (r *Route) Do(c Commander) *Route {
 	r.c = c
-	r.handler = r.createHandlerFunc(c)
-
 	return r
 }
 
+// NewRoute returns a new Route.
+// If Prefixer is nil, the route's prefix will be assumed to be empty.
+func NewRoute(p Prefixer) *Route {
+	return &Route{
+		p:           p,
+		aliases:     []string{},
+		subroutes:   []*Route{},
+		middlewares: []Middlewarer{},
+	}
+}
+
 // createHandlerFunc returns a HandlerFunc which is a wrapper around the given Commander.
+// A handlerFunc is only executed on the on a root level route.
+// If subroute, will only access its respective Handle and Resolve
 //
-// It handles prefix trimming, message parsing, and search for the deepest subroute matching a given ctx.
+// It handles prefix trimming, message parsing,
+// and search for the deepest subroute matching a given ctx.
 // ctx gets accumulated as the HandlerFunc executes.
 //
 // ctx must contain the session and message.
-func (r *Route) createHandlerFunc(c Commander) HandlerFunc {
+func createHandlerFunc(route *Route) handlerFunc {
 
-	if c == nil {
+	if route == nil {
+		return nil
+	}
+	if route.c == nil {
 		return nil
 	}
 
@@ -167,20 +180,20 @@ func (r *Route) createHandlerFunc(c Commander) HandlerFunc {
 			cmd = ctx.Msg.Content
 		)
 
-		prefix := r.getGuildPrefix(ctx.Msg.GuildID)
+		prefix := route.getGuildPrefix(ctx.Msg.GuildID)
 		ctx.Prefix = prefix
 		if cmd, ok = trimPrefix(cmd, ctx.Prefix); !ok {
 			return
 		}
 
-		args, err := handleParse(c, cmd)
+		args, err := handleParse(route.c, cmd)
 		if err != nil {
 			ctx.Err = err
-			c.Resolve(ctx)
+			route.c.Resolve(ctx)
 			return
 		}
 
-		route, depth := findRoute(r, args)
+		route, depth := findRoute(route, args)
 		if route == nil {
 			return
 		}
@@ -197,17 +210,6 @@ func (r *Route) createHandlerFunc(c Commander) HandlerFunc {
 
 		route.c.Resolve(ctx)
 
-	}
-}
-
-// NewRoute returns a new Route.
-// If Prefixer is nil, the route's prefix will be assumed to be empty.
-func NewRoute(p Prefixer) *Route {
-	return &Route{
-		p:           p,
-		aliases:     []string{},
-		subroutes:   []*Route{},
-		middlewares: []Middlewarer{},
 	}
 }
 

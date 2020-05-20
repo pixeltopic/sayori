@@ -10,20 +10,22 @@ type (
 		Parse(string) ([]string, error)
 	}
 
-	// HandlerFunc handles the command given a Context.
-	HandlerFunc func(ctx *context.Context)
+	// handlerFunc executes when a root Route is invoked.
+	// A root route is any Route that is added to the router via Has
+	handlerFunc func(ctx *context.Context)
 
-	// Middlewarer allows a custom handler to determine if a message should be routed to the Command or Event handler.
+	// Middlewarer allows execution of a handler before Handle is executed.
 	//
-	// Do accepts a context and returns an error. If error is nil, will execute the next middleware or the Command or Event handler.
-	// Otherwise, it will renter the Resolve function.
+	// Do accepts a context and returns an error. If error is nil, will execute the next Middlewarer or Handle.
+	// Otherwise, it will enter the Resolve function.
 	//
-	// If context is mutated within the middleware, it will propagate to future handlers.
+	// If context is mutated within the Middlewarer, it will propagate to future handlers. For this reason, it is encouraged
+	// to treat context as read-only.
 	Middlewarer interface {
 		Do(ctx *context.Context) error
 	}
 
-	// Prefixer identifies the prefix based on the guildID before a Command execution and removes the prefix of the command string if matched.
+	// Prefixer identifies the prefix based on the guildID and removes the prefix of the command string if matched.
 	//
 	// Load fetches a prefix that matches the guildID and returns the prefix mapped to the guildID with an ok bool.
 	//
@@ -33,12 +35,15 @@ type (
 		Default() string
 	}
 
-	// Commander is used to handle a command which will only be run on a *discordgo.MessageCreate event.
+	// Commander is used by a Route to handle Discord's Message Create events.
+	// https://discord.com/developers/docs/topics/gateway#message-create
+	//
 	// Can optionally implement CmdParser, but is not required.
 	//
 	// Handle is where a command's business logic should belong.
 	//
-	// Resolve is where an error in ctx.Err can be handled, along with any other necessary cleanup. It will always be the last function run.
+	// Resolve is where an error in ctx.Err can be handled, along with any other necessary cleanup.
+	// It is run if (custom) parsing fails, middleware fails, or if Handle fails.
 	Commander interface {
 		Handle(ctx *context.Context) error
 		Resolve(ctx *context.Context)

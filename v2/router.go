@@ -39,7 +39,7 @@ func (r *Router) Has(route *Route) {
 		ctx.Ses = s
 
 		// finds deepest subroute and executes its handler with an accumulated context
-		route.handler(ctx)
+		createHandlerFunc(route)(ctx)
 	}
 
 	r.addHandler(handler)
@@ -56,7 +56,7 @@ func (r *Router) HasOnce(route *Route) {
 		ctx.Msg = m.Message
 		ctx.Ses = s
 
-		route.handler(ctx)
+		createHandlerFunc(route)(ctx)
 	}
 
 	r.addHandlerOnce(handler)
