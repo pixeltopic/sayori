@@ -3,7 +3,7 @@ package v2
 import (
 	"strings"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	"context"
 )
 
 var cmdParserDefault = strings.Fields
@@ -23,7 +23,7 @@ func handleParse(c Commander, content string) ([]string, error) {
 
 // handleMiddlewares runs each middleware in order until completion.
 // Will abort on the first error returned by a middleware.
-func handleMiddlewares(ctx *context.Context, m []Middlewarer) error {
+func handleMiddlewares(ctx context.Context, m []Middlewarer) error {
 	for i := 0; i < len(m); i++ {
 		if err := m[i].Do(ctx); err != nil {
 			return err
@@ -178,21 +178,22 @@ func createHandlerFunc(route *Route) handlerFunc {
 		return nil
 	}
 
-	return func(ctx *context.Context) {
+	return func(ctx context.Context) {
 		var (
 			ok  bool
-			cmd = ctx.Msg.Content
+			msg = GetMsg(ctx)
+			cmd = msg.Content
 		)
 
-		prefix := route.getGuildPrefix(ctx.Msg.GuildID)
-		ctx.Prefix = prefix
-		if cmd, ok = trimPrefix(cmd, ctx.Prefix); !ok {
+		prefix := route.getGuildPrefix(msg.GuildID)
+		ctx = WithPrefix(ctx, prefix)
+		if cmd, ok = trimPrefix(cmd, prefix); !ok {
 			return
 		}
 
 		args, err := handleParse(route.c, cmd)
 		if err != nil {
-			ctx.Err = err
+			ctx = WithErr(ctx, err)
 			route.c.Resolve(ctx)
 			return
 		}
@@ -202,15 +203,19 @@ func createHandlerFunc(route *Route) handlerFunc {
 			return
 		}
 
-		ctx.Alias = append(ctx.Alias, args[:depth]...)
-		ctx.Args = append(ctx.Args, args[depth:]...)
+		ctx = WithAlias(ctx, args[:depth])
+		ctx = WithArgs(ctx, args[depth:])
 
-		if ctx.Err = handleMiddlewares(ctx, route.middlewares); ctx.Err != nil {
+		if err = handleMiddlewares(ctx, route.middlewares); err != nil {
+			ctx = WithErr(ctx, err)
 			route.c.Resolve(ctx)
 			return
 		}
 
-		ctx.Err = route.c.Handle(ctx)
+		err = route.c.Handle(ctx)
+		if err != nil {
+			ctx = WithErr(ctx, err)
+		}
 
 		route.c.Resolve(ctx)
 

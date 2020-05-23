@@ -6,8 +6,9 @@ import (
 	"sort"
 	"testing"
 
+	"context"
+
 	"github.com/bwmarrin/discordgo"
-	"github.com/pixeltopic/sayori/v2/context"
 )
 
 const testDefaultPrefix = "t!"
@@ -51,8 +52,8 @@ type (
 
 	// testCmd is a test type. The callbacks are able to access the stdlib test scope so we can easily test
 	testCmd struct {
-		HandleCallback  func(*context.Context) error
-		ResolveCallback func(*context.Context)
+		HandleCallback  func(context.Context) error
+		ResolveCallback func(context.Context)
 		ParseCallback   func(string) ([]string, error)
 	}
 
@@ -74,14 +75,14 @@ func (p *testPref) Load(_ string) (string, bool) { return p.Default(), false }
 
 func (*testPref) Default() string { return testDefaultPrefix }
 
-func (c *testCmd) Handle(ctx *context.Context) error {
+func (c *testCmd) Handle(ctx context.Context) error {
 	if c.HandleCallback != nil {
 		return c.HandleCallback(ctx)
 	}
 	return nil
 }
 
-func (c *testCmd) Resolve(ctx *context.Context) {
+func (c *testCmd) Resolve(ctx context.Context) {
 	if c.ResolveCallback != nil {
 		c.ResolveCallback(ctx)
 	}
@@ -96,33 +97,40 @@ func (c *testCmd) Parse(cmd string) ([]string, error) {
 }
 
 func (p *testIOParams) createCmd(t *testing.T) *testCmd {
-	testFunc := func(ctx *context.Context) {
+	testFunc := func(ctx context.Context) {
 
-		if ctx.Prefix != p.expectedPrefix {
-			t.Errorf("expected prefix to be equal, got %s, want %s", ctx.Prefix, p.expectedPrefix)
+		var (
+			prefix = GetPrefix(ctx)
+			alias  = GetAlias(ctx)
+			args   = GetArgs(ctx)
+		)
+
+		if prefix != p.expectedPrefix {
+			t.Errorf("expected prefix to be equal, got %s, want %s", prefix, p.expectedPrefix)
 		}
 
-		if p.expectedDepth != len(ctx.Alias) {
+		if p.expectedDepth != len(alias) {
 			t.Error("expected depth to equal length of context alias")
 		}
 
-		if !strSliceEqual(p.expectedAlias, ctx.Alias, false) {
+		if !strSliceEqual(p.expectedAlias, alias, false) {
 			t.Error("expected alias to be equal")
 		}
-		if !strSliceEqual(p.expectedArgs, ctx.Args, false) {
+		if !strSliceEqual(p.expectedArgs, args, false) {
 			t.Error("expected args to be equal")
 		}
 	}
-	handleCB := func(ctx *context.Context) error {
+	handleCB := func(ctx context.Context) error {
 		testFunc(ctx)
 		return p.expectedErr
 	}
 
-	resolveCB := func(ctx *context.Context) {
-		if ctx.Err != p.expectedErr {
-			t.Errorf("expected err to be equal, got %v, want %v", ctx.Err, p.expectedErr)
+	resolveCB := func(ctx context.Context) {
+		err := GetErr(ctx)
+		if err != nil && err.Error() != p.expectedErr.Error() {
+			t.Errorf("expected err to be equal, got %v, want %v", err, p.expectedErr)
 		}
-		if ctx.Err == nil && ctx.Err == p.expectedErr {
+		if err == nil && p.expectedErr == nil {
 			// fields here will only be valid if err was nil (this will not be run, if say - a parser or middleware err'd
 			testFunc(ctx)
 		}

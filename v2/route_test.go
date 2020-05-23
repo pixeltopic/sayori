@@ -3,7 +3,7 @@ package v2
 import (
 	"testing"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	"context"
 )
 
 // TODO: table driven test where messages are in a slice and we have one big testRouteDefns to test?
@@ -339,20 +339,18 @@ func TestRoute(t *testing.T) {
 		for _, io := range tt.testIOParams {
 			t.Run("test handler func", func(t *testing.T) {
 				rr := tt.createRouteWithTestIOParams(io, t)
-				ctx := context.New()
+				ctx := context.Background()
 				msgCreate, err := io.createMockMsg()
 				if err != nil {
 					t.FailNow()
 				}
-				ctx.Msg = msgCreate.Message
 
 				ses, err := io.createMockSes()
 				if err != nil {
 					t.FailNow()
 				}
-				ctx.Ses = ses
 
-				createHandlerFunc(rr)(ctx)
+				createHandlerFunc(rr)(WithSes(WithMsg(ctx, msgCreate.Message), ses))
 			})
 
 			t.Run("test that all aliases in the route tree are present", func(t *testing.T) {

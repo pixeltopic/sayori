@@ -1,6 +1,6 @@
 package v2
 
-import "github.com/pixeltopic/sayori/v2/context"
+import "context"
 
 type (
 	// CmdParser parses the content of a Discord message into a string slice.
@@ -12,7 +12,7 @@ type (
 
 	// handlerFunc executes when a root route is invoked.
 	// A root route is any route that is added to the router via Has
-	handlerFunc func(ctx *context.Context)
+	handlerFunc func(ctx context.Context)
 
 	// Middlewarer allows execution of a handler before Handle is executed.
 	//
@@ -22,7 +22,7 @@ type (
 	// If context is mutated within the Middlewarer, it will propagate to future handlers. For this reason, it is encouraged
 	// to treat context as read-only.
 	Middlewarer interface {
-		Do(ctx *context.Context) error
+		Do(ctx context.Context) error
 	}
 
 	// Prefixer identifies the prefix based on the guildID and removes the prefix of the command string if matched.
@@ -45,7 +45,7 @@ type (
 	// Resolve is where an error in ctx.Err can be handled, along with any other necessary cleanup.
 	// It is run if (custom) parsing fails, middleware fails, or if Handle fails.
 	Commander interface {
-		Handle(ctx *context.Context) error
-		Resolve(ctx *context.Context)
+		Handle(ctx context.Context) error
+		Resolve(ctx context.Context)
 	}
 )

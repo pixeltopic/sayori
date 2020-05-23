@@ -3,8 +3,11 @@ package filter
 import (
 	"fmt"
 
+	sayori "github.com/pixeltopic/sayori/v2"
+
+	"context"
+
 	"github.com/bwmarrin/discordgo"
-	"github.com/pixeltopic/sayori/v2/context"
 )
 
 // FmtErrDefault is the default format function to convert failing Filter(s) into an error string
@@ -78,49 +81,53 @@ func (f Filter) ignores(filter Filter) bool {
 // returns true if allowed with a zero value Filter, or false with all failing Filters combined with a bitwise `or`.
 //
 // if ctx.Msg or ctx.Ses is nil, will return false with a zero value Filter.
-func (f Filter) Validate(ctx *context.Context) (bool, Filter) {
-	var failed Filter
-	if ctx.Msg == nil || ctx.Ses == nil {
+func (f Filter) Validate(ctx context.Context) (bool, Filter) {
+	var (
+		failed Filter
+		msg    = sayori.GetMsg(ctx)
+		ses    = sayori.GetSes(ctx)
+	)
+	if msg == nil || ses == nil {
 		return false, failed
 	}
 
 	var (
-		contentLen = len(ctx.Msg.Content)
+		contentLen = len(msg.Content)
 	)
 
 	if f.ignores(MsgFromSelf) {
 		switch {
-		case ctx.Msg.Author == nil:
+		case msg.Author == nil:
 			fallthrough
-		case ctx.Ses.State == nil:
+		case ses.State == nil:
 			fallthrough
-		case ctx.Ses.State.User == nil:
+		case ses.State.User == nil:
 			return false, Filter(0)
-		case ctx.Msg.Author.ID == ctx.Ses.State.User.ID:
+		case msg.Author.ID == ses.State.User.ID:
 			failed = failed | MsgFromSelf
 		}
 	}
 
 	if f.ignores(MsgFromBot) {
 		switch {
-		case ctx.Msg.Author == nil:
+		case msg.Author == nil:
 			return false, Filter(0)
-		case ctx.Msg.Author.Bot:
+		case msg.Author.Bot:
 			failed = failed | MsgFromBot
 		}
 	}
 
-	if f.ignores(MsgFromWebhook) && len(ctx.Msg.WebhookID) != 0 {
+	if f.ignores(MsgFromWebhook) && len(msg.WebhookID) != 0 {
 		failed = failed | MsgFromWebhook
 	}
 
 	if f.ignores(MsgNoContent) && contentLen == 0 {
 		failed = failed | MsgNoContent
 	}
-	if f.ignores(MsgIsPrivate) && comesFromDM(ctx.Ses, ctx.Msg) {
+	if f.ignores(MsgIsPrivate) && comesFromDM(ses, msg) {
 		failed = failed | MsgIsPrivate
 	}
-	if f.ignores(MsgIsGuildText) && comesFromGuild(ctx.Ses, ctx.Msg) {
+	if f.ignores(MsgIsGuildText) && comesFromGuild(ses, msg) {
 		failed = failed | MsgIsGuildText
 	}
 
