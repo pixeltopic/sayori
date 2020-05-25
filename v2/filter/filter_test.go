@@ -3,12 +3,14 @@ package filter
 import (
 	"testing"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	"github.com/pixeltopic/sayori/v2/utils"
+
+	"context"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-func testNewCtx(msgGuildID, msgContent, authorID, selfUserID string, authorBot bool) *context.Context {
+func testNewCtx(msgGuildID, msgContent, authorID, selfUserID string, authorBot bool) context.Context {
 	message := &discordgo.Message{
 		Author: &discordgo.User{
 			ID:  authorID,
@@ -25,17 +27,13 @@ func testNewCtx(msgGuildID, msgContent, authorID, selfUserID string, authorBot b
 		State: state,
 	}
 
-	ctx := context.New()
-	ctx.Msg = message
-	ctx.Ses = session
-	return ctx
+	ctx := context.Background()
+	return utils.WithSes(utils.WithMsg(ctx, message), session)
 }
 
-func testNewBadCtx(s *discordgo.Session, m *discordgo.Message) *context.Context {
-	ctx := context.New()
-	ctx.Msg = m
-	ctx.Ses = s
-	return ctx
+func testNewBadCtx(s *discordgo.Session, m *discordgo.Message) context.Context {
+	ctx := context.Background()
+	return utils.WithSes(utils.WithMsg(ctx, m), s)
 }
 
 func TestFilter(t *testing.T) {
@@ -87,7 +85,7 @@ func TestFilter(t *testing.T) {
 	t.Run("test allow", func(t *testing.T) {
 		var (
 			filter, errFilter Filter
-			ctx               *context.Context
+			ctx               context.Context
 			ok                bool
 		)
 

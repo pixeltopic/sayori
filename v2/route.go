@@ -3,7 +3,9 @@ package v2
 import (
 	"strings"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	"github.com/pixeltopic/sayori/v2/utils"
+
+	"context"
 )
 
 var cmdParserDefault = strings.Fields
@@ -23,7 +25,7 @@ func handleParse(c Commander, content string) ([]string, error) {
 
 // handleMiddlewares runs each middleware in order until completion.
 // Will abort on the first error returned by a middleware.
-func handleMiddlewares(ctx *context.Context, m []Middlewarer) error {
+func handleMiddlewares(ctx context.Context, m []Middlewarer) error {
 	for i := 0; i < len(m); i++ {
 		if err := m[i].Do(ctx); err != nil {
 			return err
@@ -55,25 +57,29 @@ func trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Route wraps a command and contains its
-// handler logic, aliases, and subroutes
+// Route represents a command.
 type Route struct {
-	c Commander
-	p Prefixer
-
+	c           Commander
+	p           Prefixer
 	aliases     []string
-	handler     HandlerFunc // handler func is only executed on the top level if a route is not a subroute. if subroute, directly accesses handle/resolve
 	subroutes   []*Route
 	middlewares []Middlewarer
 }
 
-// HasAlias returns whether the given string is an alias or not.
-// Not case sensitive.
+// IsDefault returns true if a route will always be executed when Discord produces a Message Create event
+// with respect to the Prefixer (if provided).
 //
-// Since Events do not have an alias, if the route has no aliases it will default to true.
+// https://discord.com/developers/docs/topics/gateway#message-create
+//
+// A default route will only be executed if it is not a subroute. Any subroutes it might contain will be ignored.
+func (r *Route) IsDefault() bool {
+	return len(r.aliases) == 0
+}
+
+// HasAlias returns if the given string is a case-insensitive alias of the current route
 func (r *Route) HasAlias(a string) bool {
-	if len(r.aliases) == 0 {
-		return true
+	if r.IsDefault() {
+		return false
 	}
 	a = strings.ToLower(a)
 	for _, alias := range r.aliases {
@@ -84,8 +90,9 @@ func (r *Route) HasAlias(a string) bool {
 	return false
 }
 
-// Find a subroute alias in this route's direct children.
-// If alias is not found, will return nil
+// Find the first subroute of this route matching the given subroute alias.
+// Subroute match is prioritized by order of the subroute appends.
+// If alias is not found, will return nil.
 func (r *Route) Find(subAlias string) *Route {
 	for _, sub := range r.subroutes {
 		if sub.HasAlias(subAlias) {
@@ -109,93 +116,111 @@ func (r *Route) getGuildPrefix(guildID string) string {
 }
 
 // On adds new identifiers for a Route.
-// Identifiers must not have any whitespace.
+// By default, aliases with whitespaces will not be matched unless a Commander also implements the CmdParser interface
 func (r *Route) On(aliases ...string) *Route {
 	r.aliases = append(r.aliases, aliases...)
 	return r
 }
 
 // Has binds subroutes to the current route.
-// Subroutes are executed sequentially,
-// assuming the current route handler succeeds
+// Subroutes with duplicate aliases will be prioritized in order of which they were added.
 func (r *Route) Has(subroutes ...*Route) *Route {
 	r.subroutes = append(r.subroutes, subroutes...)
 	return r
 }
 
 // Use adds middlewares to the route.
+// Middlewares are executed in order of which they were added, and will always run immediately before the core handler.
+// Middleware errors can be handled by Resolve.
 func (r *Route) Use(middlewares ...Middlewarer) *Route {
 	r.middlewares = append(r.middlewares, middlewares...)
 	return r
 }
 
-// Do composes a commander implementation into a CtxHandler
+// Do the execution of a Commander implementation when there is a Message Create event.
+// https://discord.com/developers/docs/topics/gateway#message-create
 //
-// if cmd is nil, will no-op
+// A Commander can optionally implement CmdParser for custom parsing of message content.
+// Parsing errors will be handled by Resolve.
+//
+// No-ops if Commander is nil.
+//
+// If Do is called multiple times, the previous Do call will be overwritten.
 func (r *Route) Do(c Commander) *Route {
 	r.c = c
-	r.handler = r.createHandlerFunc(c)
-
 	return r
 }
 
-// findDeepestHandler finds the deepest route matching the subcommand and executes its handler
-// with an accumulated context
-//
-// ctx must contain the session and message.
-func (r *Route) createHandlerFunc(c Commander) HandlerFunc {
-
-	if c == nil {
-		return nil
-	}
-
-	return func(ctx *context.Context) {
-		var (
-			ok  bool
-			cmd = ctx.Msg.Content
-		)
-
-		prefix := r.getGuildPrefix(ctx.Msg.GuildID)
-		ctx.Prefix = prefix
-		if cmd, ok = trimPrefix(cmd, ctx.Prefix); !ok {
-			return
-		}
-
-		args, err := handleParse(c, cmd)
-		if err != nil {
-			ctx.Err = err
-			c.Resolve(ctx)
-			return
-		}
-
-		route, depth := findRoute(r, args)
-		if route == nil {
-			return
-		}
-
-		ctx.Alias = append(ctx.Alias, args[:depth]...)
-		ctx.Args = append(ctx.Args, args[depth:]...)
-
-		if ctx.Err = handleMiddlewares(ctx, route.middlewares); ctx.Err != nil {
-			route.c.Resolve(ctx)
-			return
-		}
-
-		ctx.Err = route.c.Handle(ctx)
-
-		route.c.Resolve(ctx)
-
-	}
-}
-
 // NewRoute returns a new Route.
-// If Prefixer is nil, will assume no prefix.
+// If Prefixer is nil, the route's prefix will be assumed to be empty.
 func NewRoute(p Prefixer) *Route {
 	return &Route{
 		p:           p,
 		aliases:     []string{},
 		subroutes:   []*Route{},
 		middlewares: []Middlewarer{},
+	}
+}
+
+// createHandlerFunc returns a HandlerFunc which is a wrapper around the given Commander.
+// A handlerFunc is only executed on the on a root level route.
+// If subroute, will only access its respective Handle and Resolve
+//
+// It handles prefix trimming, message parsing,
+// and search for the deepest subroute matching a given ctx.
+// ctx gets accumulated as the HandlerFunc executes.
+//
+// ctx must contain the session and message.
+func createHandlerFunc(route *Route) handlerFunc {
+
+	if route == nil {
+		return nil
+	}
+	if route.c == nil {
+		return nil
+	}
+
+	return func(ctx context.Context) {
+		var (
+			ok  bool
+			msg = utils.GetMsg(ctx)
+			cmd = msg.Content
+		)
+
+		prefix := route.getGuildPrefix(msg.GuildID)
+		ctx = utils.WithPrefix(ctx, prefix)
+		if cmd, ok = trimPrefix(cmd, prefix); !ok {
+			return
+		}
+
+		args, err := handleParse(route.c, cmd)
+		if err != nil {
+			ctx = utils.WithErr(ctx, err)
+			route.c.Resolve(ctx)
+			return
+		}
+
+		route, depth := findRoute(route, args)
+		if route == nil {
+			return
+		}
+
+		ctx = utils.WithAlias(ctx, args[:depth])
+		ctx = utils.WithArgs(ctx, args[depth:])
+
+		if err = handleMiddlewares(ctx, route.middlewares); err != nil {
+			ctx = utils.WithErr(ctx, err)
+			route.c.Resolve(ctx)
+			return
+		}
+
+		err = route.c.Handle(ctx)
+		if err != nil {
+			ctx = utils.WithErr(ctx, err)
+		}
+
+		route.c.Resolve(ctx)
+
 	}
 }
 
@@ -209,14 +234,21 @@ func findRoute(route *Route, args []string) (*Route, int) {
 		return nil, depth
 	}
 
+	// no aliases means this is an event handler so immediately return
+	if route.IsDefault() {
+		return route, depth
+	}
+
 	if !route.HasAlias(args[0]) {
 		return nil, depth
 	}
 
 	// note: depth is incremented even if depth < len(args) except on the initial entry
+	// if a route with no aliases is found in this loop, will consider it not found and return last valid route
 	for depth = 1; depth < len(args); depth++ {
 
 		// finds a subroute matching the token from a given route; if no match returns nil
+		// will not match subroutes that have no aliases.
 		subroute := route.Find(args[depth])
 
 		if subroute == nil {

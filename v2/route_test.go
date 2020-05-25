@@ -3,7 +3,9 @@ package v2
 import (
 	"testing"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	"github.com/pixeltopic/sayori/v2/utils"
+
+	"context"
 )
 
 // TODO: table driven test where messages are in a slice and we have one big testRouteDefns to test?
@@ -182,26 +184,175 @@ func TestRoute(t *testing.T) {
 				},
 			},
 		},
+		{
+			testIOParams: []*testIOParams{
+				// tests a default route with a subroute which should not be considered.
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: testDefaultPrefix + "sub sub hi there",
+					},
+					msgContentTokenized: []string{testDefaultPrefix + "sub", "sub", "hi", "there"},
+					expectedDepth:       0,
+					expectedAliasTree:   []string{"sub"},
+					expectedPrefix:      "",
+					expectedAlias:       []string{},
+					expectedArgs:        []string{testDefaultPrefix + "sub", "sub", "hi", "there"},
+					expectedErr:         nil,
+				},
+			},
+			routeParams: &testRouteDefns{
+				aliases: []string{},
+				subroutes: []*testRouteDefns{
+					{
+						aliases:   []string{"sub"},
+						subroutes: []*testRouteDefns{},
+					},
+				},
+			},
+		},
+		{
+			testIOParams: []*testIOParams{
+				// Default route should be ignored
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: "root s hi there",
+					},
+					msgContentTokenized: []string{"root", "s", "hi", "there"},
+					expectedDepth:       2,
+					expectedAliasTree:   []string{"root", "sub", "s", "subsub1"},
+					expectedPrefix:      "",
+					expectedAlias:       []string{"root", "s"},
+					expectedArgs:        []string{"hi", "there"},
+					expectedErr:         nil,
+				},
+				// Default route and its subroutes should be ignored
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: "root arg subsub1 arg",
+					},
+					msgContentTokenized: []string{"root", "arg", "subsub1", "arg"},
+					expectedDepth:       1,
+					expectedAliasTree:   []string{"root", "sub", "s", "subsub1"},
+					expectedPrefix:      "",
+					expectedAlias:       []string{"root"},
+					expectedArgs:        []string{"arg", "subsub1", "arg"},
+					expectedErr:         nil,
+				},
+				// Default route and its subroutes should be ignored
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: "root subsub1 arg",
+					},
+					msgContentTokenized: []string{"root", "subsub1", "arg"},
+					expectedDepth:       1,
+					expectedAliasTree:   []string{"root", "sub", "s", "subsub1"},
+					expectedPrefix:      "",
+					expectedAlias:       []string{"root"},
+					expectedArgs:        []string{"subsub1", "arg"},
+					expectedErr:         nil,
+				},
+			},
+			routeParams: &testRouteDefns{
+				aliases: []string{"root"},
+				subroutes: []*testRouteDefns{
+					{
+						aliases: []string{"sub", "s"},
+						subroutes: []*testRouteDefns{
+							{
+								aliases:   []string{},
+								subroutes: []*testRouteDefns{},
+							},
+						},
+					},
+					{
+						aliases: []string{},
+						subroutes: []*testRouteDefns{
+							{
+								aliases:   []string{"subsub1"},
+								subroutes: []*testRouteDefns{},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			testIOParams: []*testIOParams{
+				// Default route with a correct prefixer will return all tokens as args
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: testDefaultPrefix + "root s hi there",
+					},
+					msgContentTokenized: []string{"root", "s", "hi", "there"},
+					expectedDepth:       0,
+					expectedAliasTree:   []string{},
+					expectedPrefix:      testDefaultPrefix,
+					expectedAlias:       []string{},
+					expectedArgs:        []string{"root", "s", "hi", "there"},
+					expectedErr:         nil,
+				},
+				// Default route with invalid prefix will not run
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: "root s hi there",
+					},
+					msgContentTokenized: []string{},
+					expectedDepth:       0,
+					expectedAliasTree:   []string{},
+					expectedPrefix:      "",
+					expectedAlias:       []string{},
+					expectedArgs:        []string{},
+					expectedErr:         nil,
+				},
+			},
+			routeParams: &testRouteDefns{
+				p:         &testPref{},
+				aliases:   []string{},
+				subroutes: []*testRouteDefns{},
+			},
+		},
 	}
 
 	for _, tt := range testTrees {
 		for _, io := range tt.testIOParams {
 			t.Run("test handler func", func(t *testing.T) {
 				rr := tt.createRouteWithTestIOParams(io, t)
-				ctx := context.New()
+				ctx := context.Background()
 				msgCreate, err := io.createMockMsg()
 				if err != nil {
 					t.FailNow()
 				}
-				ctx.Msg = msgCreate.Message
 
 				ses, err := io.createMockSes()
 				if err != nil {
 					t.FailNow()
 				}
-				ctx.Ses = ses
 
-				rr.handler(ctx)
+				createHandlerFunc(rr)(utils.WithSes(utils.WithMsg(ctx, msgCreate.Message), ses))
 			})
 
 			t.Run("test that all aliases in the route tree are present", func(t *testing.T) {

@@ -10,10 +10,10 @@ import (
 
 	"github.com/pixeltopic/sayori/v2/filter"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	"context"
 
 	"github.com/bwmarrin/discordgo"
-	v2 "github.com/pixeltopic/sayori/v2"
+	sayori "github.com/pixeltopic/sayori/v2"
 )
 
 // Variables used for command line parameters
@@ -41,7 +41,7 @@ func (*Prefix) Default() string { return defaultPrefix }
 type Filter struct{}
 
 // Do a check for valid invocation context
-func (*Filter) Do(ctx *context.Context) error {
+func (*Filter) Do(ctx context.Context) error {
 	f := filter.New(filter.MsgIsPrivate)
 
 	valid, _ := f.Validate(ctx)
@@ -56,9 +56,12 @@ func (*Filter) Do(ctx *context.Context) error {
 type Validate struct{}
 
 // Do a check for valid permissions
-func (*Validate) Do(ctx *context.Context) error {
-	aPerm, err := ctx.Ses.State.UserChannelPermissions(
-		ctx.Msg.Author.ID, ctx.Msg.ChannelID)
+func (*Validate) Do(ctx context.Context) error {
+
+	cmd := sayori.CmdFromContext(ctx)
+
+	aPerm, err := cmd.Ses.State.UserChannelPermissions(
+		cmd.Msg.Author.ID, cmd.Msg.ChannelID)
 	if err != nil {
 		return err
 	}
@@ -74,15 +77,19 @@ func (*Validate) Do(ctx *context.Context) error {
 type Privilege struct{}
 
 // Handle handles the command
-func (*Privilege) Handle(ctx *context.Context) error {
-	_, _ = ctx.Ses.ChannelMessageSend(ctx.Msg.ChannelID, "You are privileged!")
+func (*Privilege) Handle(ctx context.Context) error {
+	cmd := sayori.CmdFromContext(ctx)
+
+	_, _ = cmd.Ses.ChannelMessageSend(cmd.Msg.ChannelID, "You are privileged!")
 	return nil
 }
 
 // Resolve handles any errors
-func (*Privilege) Resolve(ctx *context.Context) {
-	if ctx.Err != nil {
-		_, _ = ctx.Ses.ChannelMessageSend(ctx.Msg.ChannelID, ctx.Err.Error())
+func (*Privilege) Resolve(ctx context.Context) {
+	cmd := sayori.CmdFromContext(ctx)
+
+	if cmd.Err != nil {
+		_, _ = cmd.Ses.ChannelMessageSend(cmd.Msg.ChannelID, cmd.Err.Error())
 	}
 }
 
@@ -93,10 +100,10 @@ func main() {
 		return
 	}
 
-	router := v2.New(dg)
+	router := sayori.New(dg)
 
 	router.Has(
-		v2.NewRoute(&Prefix{}).
+		sayori.NewRoute(&Prefix{}).
 			On("p", "priv", "privileged").
 			Do(&Privilege{}).
 			Use(&Filter{}, &Validate{}),

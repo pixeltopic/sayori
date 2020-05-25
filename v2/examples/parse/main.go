@@ -8,20 +8,20 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	"context"
 
 	"github.com/bwmarrin/discordgo"
-	v2 "github.com/pixeltopic/sayori/v2"
+	sayori "github.com/pixeltopic/sayori/v2"
 )
 
 // Variables used for command line parameters
 var (
-	Token string
+	Token   string
+	aliases = []string{"foo bar", "foo foo"}
 )
 
 const (
 	defaultPrefix = "^"
-	alias         = "foo bar"
 )
 
 func init() {
@@ -54,10 +54,9 @@ func (*Parse) Parse(s string) ([]string, error) {
 
 	first, second := toks[0], toks[1]
 
-	// start of message + length of token + space - start of second token == 0
-	dist := (strings.Index(s, first) + len(first) + 1) - strings.Index(s, second)
+	pos := strings.Index(strings.TrimSpace(s), fmt.Sprintf("%s %s", first, second))
 
-	if dist != 0 {
+	if pos != 0 {
 		return toks, nil
 	}
 
@@ -68,16 +67,20 @@ func (*Parse) Parse(s string) ([]string, error) {
 }
 
 // Handle handles the command
-func (*Parse) Handle(ctx *context.Context) error {
-	_, _ = ctx.Ses.ChannelMessageSend(ctx.Msg.ChannelID, "Custom parser ran!")
+func (*Parse) Handle(ctx context.Context) error {
+	cmd := sayori.CmdFromContext(ctx)
+
+	_, _ = cmd.Ses.ChannelMessageSend(cmd.Msg.ChannelID, "Custom parser ran!")
 	return nil
 }
 
 // Resolve handles any errors
-func (*Parse) Resolve(ctx *context.Context) {
-	switch err := ctx.Err.(type) {
+func (*Parse) Resolve(ctx context.Context) {
+	cmd := sayori.CmdFromContext(ctx)
+
+	switch err := cmd.Err.(type) {
 	case *tokLengthErr:
-		_, _ = ctx.Ses.ChannelMessageSend(ctx.Msg.ChannelID, err.Error())
+		_, _ = cmd.Ses.ChannelMessageSend(cmd.Msg.ChannelID, err.Error())
 	default:
 	}
 }
@@ -89,9 +92,9 @@ func main() {
 		return
 	}
 
-	router := v2.New(dg)
+	router := sayori.New(dg)
 
-	router.Has(v2.NewRoute(&Prefix{}).On(alias).Do(&Parse{}))
+	router.Has(sayori.NewRoute(&Prefix{}).On(aliases...).Do(&Parse{}))
 
 	err = router.Open()
 	if err != nil {

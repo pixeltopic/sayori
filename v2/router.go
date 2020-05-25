@@ -1,8 +1,11 @@
 package v2
 
 import (
+	"context"
+
+	"github.com/pixeltopic/sayori/v2/utils"
+
 	"github.com/bwmarrin/discordgo"
-	"github.com/pixeltopic/sayori/v2/context"
 )
 
 // Router maps commands to handlers.
@@ -27,22 +30,22 @@ func (r *Router) HasOnceDefault(h interface{}) {
 	r.addHandlerOnce(h)
 }
 
+func makeHandlerForDgo(route *Route) func(*discordgo.Session, *discordgo.MessageCreate) {
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		ctx := context.Background()
+
+		// finds deepest subroute and executes its handler with an accumulated context
+		createHandlerFunc(route)(utils.WithSes(utils.WithMsg(ctx, m.Message), s))
+	}
+}
+
 // Has binds a Route to the Router.
 func (r *Router) Has(route *Route) {
 	if route == nil {
 		return
 	}
 
-	handler := func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		ctx := context.New()
-		ctx.Msg = m.Message
-		ctx.Ses = s
-
-		// finds deepest subroute and executes its handler with an accumulated context
-		route.handler(ctx)
-	}
-
-	r.addHandler(handler)
+	r.addHandler(makeHandlerForDgo(route))
 }
 
 // HasOnce binds binds a Route to the Router, but the route will only fire at most once.
@@ -51,15 +54,7 @@ func (r *Router) HasOnce(route *Route) {
 		return
 	}
 
-	handler := func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		ctx := context.New()
-		ctx.Msg = m.Message
-		ctx.Ses = s
-
-		route.handler(ctx)
-	}
-
-	r.addHandlerOnce(handler)
+	r.addHandlerOnce(makeHandlerForDgo(route))
 }
 
 func (r *Router) addHandler(h interface{}) {

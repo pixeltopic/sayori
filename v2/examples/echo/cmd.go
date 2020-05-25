@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pixeltopic/sayori/v2/context"
+	sayori "github.com/pixeltopic/sayori/v2"
+
+	"context"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -35,22 +37,26 @@ func trimmer(message, prefix string, alias []string) string {
 type Echo struct{}
 
 // Handle handles the echo command
-func (*Echo) Handle(ctx *context.Context) error {
+func (*Echo) Handle(ctx context.Context) error {
 
-	if len(ctx.Args) == 0 {
+	cmd := sayori.CmdFromContext(ctx)
+
+	if len(cmd.Args) == 0 {
 		return errors.New("nothing to echo")
 	}
 
-	_, _ = ctx.Ses.ChannelMessageSend(
-		ctx.Msg.ChannelID, "Echoing! "+trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias))
+	_, _ = cmd.Ses.ChannelMessageSend(
+		cmd.Msg.ChannelID, "Echoing! "+trimmer(cmd.Msg.Content, cmd.Prefix, cmd.Alias))
 
 	return nil
 }
 
 // Resolve handles any errors
-func (*Echo) Resolve(ctx *context.Context) {
-	if ctx.Err != nil {
-		_, _ = ctx.Ses.ChannelMessageSend(ctx.Msg.ChannelID, ctx.Err.Error())
+func (*Echo) Resolve(ctx context.Context) {
+	cmd := sayori.CmdFromContext(ctx)
+
+	if cmd.Err != nil {
+		_, _ = cmd.Ses.ChannelMessageSend(cmd.Msg.ChannelID, cmd.Err.Error())
 	}
 }
 
@@ -58,18 +64,20 @@ func (*Echo) Resolve(ctx *context.Context) {
 type EchoFmt struct{}
 
 // Handle handles the echo subcommand
-func (*EchoFmt) Handle(ctx *context.Context) error {
+func (*EchoFmt) Handle(ctx context.Context) error {
 
-	if len(ctx.Args) == 0 {
+	cmd := sayori.CmdFromContext(ctx)
+
+	if len(cmd.Args) == 0 {
 		return errors.New("nothing to format echo")
 	}
 
-	_, _ = ctx.Ses.ChannelMessageSendEmbed(
-		ctx.Msg.ChannelID, &discordgo.MessageEmbed{
+	_, _ = cmd.Ses.ChannelMessageSendEmbed(
+		cmd.Msg.ChannelID, &discordgo.MessageEmbed{
 			Description: fmt.Sprintf(`"%s" - %s#%s`,
-				trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias),
-				ctx.Msg.Author.Username,
-				ctx.Msg.Author.Discriminator,
+				trimmer(cmd.Msg.Content, cmd.Prefix, cmd.Alias),
+				cmd.Msg.Author.Username,
+				cmd.Msg.Author.Discriminator,
 			),
 		})
 
@@ -77,9 +85,11 @@ func (*EchoFmt) Handle(ctx *context.Context) error {
 }
 
 // Resolve handles any errors
-func (*EchoFmt) Resolve(ctx *context.Context) {
-	if ctx.Err != nil {
-		_, _ = ctx.Ses.ChannelMessageSend(ctx.Msg.ChannelID, ctx.Err.Error())
+func (*EchoFmt) Resolve(ctx context.Context) {
+	cmd := sayori.CmdFromContext(ctx)
+
+	if cmd.Err != nil {
+		_, _ = cmd.Ses.ChannelMessageSend(cmd.Msg.ChannelID, cmd.Err.Error())
 	}
 }
 
@@ -87,9 +97,11 @@ func (*EchoFmt) Resolve(ctx *context.Context) {
 type EchoColor struct{}
 
 // Handle handles the echo subcommand
-func (*EchoColor) Handle(ctx *context.Context) error {
+func (*EchoColor) Handle(ctx context.Context) error {
 
-	if len(ctx.Args) == 0 {
+	cmd := sayori.CmdFromContext(ctx)
+
+	if len(cmd.Args) == 0 {
 		return errors.New("nothing to color echo")
 	}
 
@@ -101,14 +113,14 @@ func (*EchoColor) Handle(ctx *context.Context) error {
 %s 
 - %s#%s`,
 		codeBlockWrap,
-		trimmer(ctx.Msg.Content, ctx.Prefix, ctx.Alias),
+		trimmer(cmd.Msg.Content, cmd.Prefix, cmd.Alias),
 		codeBlockWrap,
-		ctx.Msg.Author.Username,
-		ctx.Msg.Author.Discriminator,
+		cmd.Msg.Author.Username,
+		cmd.Msg.Author.Discriminator,
 	)
 
-	_, _ = ctx.Ses.ChannelMessageSendEmbed(
-		ctx.Msg.ChannelID, &discordgo.MessageEmbed{
+	_, _ = cmd.Ses.ChannelMessageSendEmbed(
+		cmd.Msg.ChannelID, &discordgo.MessageEmbed{
 			Description: msgContent,
 		})
 
@@ -116,8 +128,10 @@ func (*EchoColor) Handle(ctx *context.Context) error {
 }
 
 // Resolve handles any errors
-func (*EchoColor) Resolve(ctx *context.Context) {
-	if ctx.Err != nil {
-		_, _ = ctx.Ses.ChannelMessageSend(ctx.Msg.ChannelID, ctx.Err.Error())
+func (*EchoColor) Resolve(ctx context.Context) {
+	cmd := sayori.CmdFromContext(ctx)
+
+	if cmd.Err != nil {
+		_, _ = cmd.Ses.ChannelMessageSend(cmd.Msg.ChannelID, cmd.Err.Error())
 	}
 }

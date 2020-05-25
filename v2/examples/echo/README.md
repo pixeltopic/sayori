@@ -16,7 +16,7 @@ e!echo color blah blah blah
 e!echo blah blah blah
 ```
 
-`e!fmt` and `e!color` are also valid commands.
+`e!fmt` and `e!color` are also valid commands. Note that a space after a prefix is valid with default message parsing.
 `fmt` has the subcommand `color`, but `color` has no subcommands.
 
 So these commands are valid:
