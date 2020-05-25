@@ -1,8 +1,9 @@
 package filter
 
 import (
-	sayori "github.com/pixeltopic/sayori/v2"
 	"testing"
+
+	"github.com/pixeltopic/sayori/v2/utils"
 
 	"context"
 
@@ -27,12 +28,12 @@ func testNewCtx(msgGuildID, msgContent, authorID, selfUserID string, authorBot b
 	}
 
 	ctx := context.Background()
-	return sayori.WithSes(sayori.WithMsg(ctx, message), session)
+	return utils.WithSes(utils.WithMsg(ctx, message), session)
 }
 
 func testNewBadCtx(s *discordgo.Session, m *discordgo.Message) context.Context {
 	ctx := context.Background()
-	return sayori.WithSes(sayori.WithMsg(ctx, m),s)
+	return utils.WithSes(utils.WithMsg(ctx, m), s)
 }
 
 func TestFilter(t *testing.T) {

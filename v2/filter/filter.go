@@ -3,7 +3,7 @@ package filter
 import (
 	"fmt"
 
-	sayori "github.com/pixeltopic/sayori/v2"
+	"github.com/pixeltopic/sayori/v2/utils"
 
 	"context"
 
@@ -84,8 +84,8 @@ func (f Filter) ignores(filter Filter) bool {
 func (f Filter) Validate(ctx context.Context) (bool, Filter) {
 	var (
 		failed Filter
-		msg    = sayori.GetMsg(ctx)
-		ses    = sayori.GetSes(ctx)
+		msg    = utils.GetMsg(ctx)
+		ses    = utils.GetSes(ctx)
 	)
 	if msg == nil || ses == nil {
 		return false, failed

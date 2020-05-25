@@ -3,6 +3,8 @@ package v2
 import (
 	"context"
 
+	"github.com/pixeltopic/sayori/v2/utils"
+
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -33,7 +35,7 @@ func makeHandlerForDgo(route *Route) func(*discordgo.Session, *discordgo.Message
 		ctx := context.Background()
 
 		// finds deepest subroute and executes its handler with an accumulated context
-		createHandlerFunc(route)(WithSes(WithMsg(ctx, m.Message), s))
+		createHandlerFunc(route)(utils.WithSes(utils.WithMsg(ctx, m.Message), s))
 	}
 }
 

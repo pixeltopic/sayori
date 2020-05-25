@@ -99,24 +99,20 @@ func (c *testCmd) Parse(cmd string) ([]string, error) {
 func (p *testIOParams) createCmd(t *testing.T) *testCmd {
 	testFunc := func(ctx context.Context) {
 
-		var (
-			prefix = GetPrefix(ctx)
-			alias  = GetAlias(ctx)
-			args   = GetArgs(ctx)
-		)
+		cmd := CmdFromContext(ctx)
 
-		if prefix != p.expectedPrefix {
-			t.Errorf("expected prefix to be equal, got %s, want %s", prefix, p.expectedPrefix)
+		if cmd.Prefix != p.expectedPrefix {
+			t.Errorf("expected prefix to be equal, got %s, want %s", cmd.Prefix, p.expectedPrefix)
 		}
 
-		if p.expectedDepth != len(alias) {
+		if p.expectedDepth != len(cmd.Alias) {
 			t.Error("expected depth to equal length of context alias")
 		}
 
-		if !strSliceEqual(p.expectedAlias, alias, false) {
+		if !strSliceEqual(p.expectedAlias, cmd.Alias, false) {
 			t.Error("expected alias to be equal")
 		}
-		if !strSliceEqual(p.expectedArgs, args, false) {
+		if !strSliceEqual(p.expectedArgs, cmd.Args, false) {
 			t.Error("expected args to be equal")
 		}
 	}
@@ -126,11 +122,13 @@ func (p *testIOParams) createCmd(t *testing.T) *testCmd {
 	}
 
 	resolveCB := func(ctx context.Context) {
-		err := GetErr(ctx)
-		if err != nil && err.Error() != p.expectedErr.Error() {
-			t.Errorf("expected err to be equal, got %v, want %v", err, p.expectedErr)
+
+		cmd := CmdFromContext(ctx)
+
+		if cmd.Err != nil && cmd.Err.Error() != p.expectedErr.Error() {
+			t.Errorf("expected err to be equal, got %v, want %v", cmd.Err, p.expectedErr)
 		}
-		if err == nil && p.expectedErr == nil {
+		if cmd.Err == nil && p.expectedErr == nil {
 			// fields here will only be valid if err was nil (this will not be run, if say - a parser or middleware err'd
 			testFunc(ctx)
 		}

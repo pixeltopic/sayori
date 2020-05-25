@@ -3,6 +3,8 @@ package v2
 import (
 	"testing"
 
+	"github.com/pixeltopic/sayori/v2/utils"
+
 	"context"
 )
 
@@ -350,7 +352,7 @@ func TestRoute(t *testing.T) {
 					t.FailNow()
 				}
 
-				createHandlerFunc(rr)(WithSes(WithMsg(ctx, msgCreate.Message), ses))
+				createHandlerFunc(rr)(utils.WithSes(utils.WithMsg(ctx, msgCreate.Message), ses))
 			})
 
 			t.Run("test that all aliases in the route tree are present", func(t *testing.T) {

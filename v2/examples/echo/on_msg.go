@@ -5,7 +5,7 @@ import (
 	"log"
 	"sync"
 
-	sayori "github.com/pixeltopic/sayori/v2"
+	"github.com/pixeltopic/sayori/v2/utils"
 )
 
 // OnMsg will run on every message event and count
@@ -21,7 +21,7 @@ func (m *OnMsg) Handle(ctx context.Context) error {
 	defer m.Unlock()
 
 	m.totalSent++
-	log.Printf("Message count: %d, args: %v\n", m.totalSent, sayori.GetArgs(ctx))
+	log.Printf("Message count: %d, args: %v\n", m.totalSent, utils.GetArgs(ctx))
 	return nil
 }
 

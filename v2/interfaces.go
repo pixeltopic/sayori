@@ -19,8 +19,7 @@ type (
 	// Do accepts a context and returns an error. If error is nil, will execute the next Middlewarer or Handle.
 	// Otherwise, it will enter the Resolve function.
 	//
-	// If context is mutated within the Middlewarer, it will propagate to future handlers. For this reason, it is encouraged
-	// to treat context as read-only.
+	// Context mutated from within a middleware will only persist within scope.
 	Middlewarer interface {
 		Do(ctx context.Context) error
 	}
