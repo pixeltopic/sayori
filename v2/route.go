@@ -152,7 +152,9 @@ func (r *Route) Do(c Commander) *Route {
 }
 
 // NewRoute returns a new Route.
+//
 // If Prefixer is nil, the route's prefix will be assumed to be empty.
+// The Prefixer will only be run if a Route is added to the Router as a root-level route, and not a subroute.
 func NewRoute(p Prefixer) *Route {
 	return &Route{
 		p:           p,
