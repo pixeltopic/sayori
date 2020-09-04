@@ -57,7 +57,9 @@ func trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Route represents a command.
+// Route represents a command which consumes a DiscordGo MessageCreate event under the hood.
+//
+// Routes can be modified after they are added to the router, and are not goroutine safe.
 type Route struct {
 	c           Commander
 	p           Prefixer
