@@ -5,19 +5,21 @@ import "context"
 type (
 	// CmdParser parses the content of a Discord message into a string slice.
 	//
-	// Optionally implemented by Commander
+	// Optionally implemented by Handler
 	CmdParser interface {
 		Parse(string) ([]string, error)
 	}
 
 	// handlerFunc executes when a root route is invoked.
 	// A root route is any route that is added to the router via Has
+	//
+	// Not to be confused with Handler. handlerFunc calls the proper Handler given a command.
 	handlerFunc func(ctx context.Context)
 
 	// Middlewarer allows execution of a handler before Handle is executed.
 	//
 	// Do accepts a context and returns an error. If error is nil, will execute the next Middlewarer or Handle.
-	// Otherwise, it will enter the Resolve function.
+	// Otherwise, it will enter the Resolve function (if implemented)
 	//
 	// Context mutated from within a middleware will only persist within scope.
 	Middlewarer interface {
@@ -34,17 +36,21 @@ type (
 		Default() string
 	}
 
-	// Commander is used by a route to handle Discord's Message Create events.
+	// Handler is bound to a route and will be called when handling Discord's Message Create events.
 	// https://discord.com/developers/docs/topics/gateway#message-create
 	//
-	// Can optionally implement CmdParser, but is not required.
+	// Can optionally implement CmdParser and Resolver, but is not required.
 	//
-	// Handle is where a command's business logic should belong.
-	//
-	// Resolve is where an error in ctx.Err can be handled, along with any other necessary cleanup.
-	// It is run if (custom) parsing fails, middleware fails, or if Handle fails.
-	Commander interface {
+	// If Handler does not implement Resolver, any returned error will be ignored.
+	Handler interface {
 		Handle(ctx context.Context) error
+	}
+
+	// Resolver is an optional interface that can be satisfied by a command.
+	// It is used for handling any errors returned from Handler.
+	//
+	// Optionally implemented by Handler
+	Resolver interface {
 		Resolve(ctx context.Context)
 	}
 )
