@@ -20,14 +20,21 @@ func New(s *discordgo.Session) *Router {
 	}
 }
 
-// HasDefault binds a default discordgo event handler to the builder.
-func (r *Router) HasDefault(h interface{}) {
-	r.addHandler(h)
+// HasDefault binds a default DiscordGo event handler to the builder.
+// It is useful when there is a handler that consumes something other than a MessageCreate event.
+//
+// It returns a function that will remove the handler when executed.
+func (r *Router) HasDefault(h interface{}) func() {
+	return r.addHandler(h)
 }
 
-// HasOnceDefault binds a default discordgo event handler to the builder.
-func (r *Router) HasOnceDefault(h interface{}) {
-	r.addHandlerOnce(h)
+// HasOnceDefault binds a default DiscordGo event handler to the builder.
+// It is useful when there is a handler that consumes something other than a MessageCreate event.
+// The added handler will be removed upon the first execution.
+//
+// It returns a function that will remove the handler when executed.
+func (r *Router) HasOnceDefault(h interface{}) func() {
+	return r.addHandlerOnce(h)
 }
 
 func makeHandlerForDgo(route *Route) func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -40,33 +47,35 @@ func makeHandlerForDgo(route *Route) func(*discordgo.Session, *discordgo.Message
 }
 
 // Has binds a Route to the Router.
-func (r *Router) Has(route *Route) {
+func (r *Router) Has(route *Route) func() {
 	if route == nil {
-		return
+		return nil
 	}
 
-	r.addHandler(makeHandlerForDgo(route))
+	return r.addHandler(makeHandlerForDgo(route))
 }
 
 // HasOnce binds binds a Route to the Router, but the route will only fire at most once.
-func (r *Router) HasOnce(route *Route) {
+func (r *Router) HasOnce(route *Route) func() {
 	if route == nil {
-		return
+		return nil
 	}
 
-	r.addHandlerOnce(makeHandlerForDgo(route))
+	return r.addHandlerOnce(makeHandlerForDgo(route))
 }
 
-func (r *Router) addHandler(h interface{}) {
+func (r *Router) addHandler(h interface{}) func() {
 	if r.S != nil && h != nil {
-		r.S.AddHandler(h)
+		return r.S.AddHandler(h)
 	}
+	return nil
 }
 
-func (r *Router) addHandlerOnce(h interface{}) {
+func (r *Router) addHandlerOnce(h interface{}) func() {
 	if r.S != nil && h != nil {
-		r.S.AddHandlerOnce(h)
+		return r.S.AddHandlerOnce(h)
 	}
+	return nil
 }
 
 // Open creates a websocket connection to Discord.

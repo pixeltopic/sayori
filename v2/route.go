@@ -1,26 +1,33 @@
 package v2
 
 import (
+	"context"
 	"strings"
 
 	"github.com/pixeltopic/sayori/v2/utils"
-
-	"context"
 )
 
 var cmdParserDefault = strings.Fields
 
-// handleParse checks if an event implements Parseable; if it does, runs Parseable. Else, runs default parser
-func handleParse(c Commander, content string) ([]string, error) {
+// handleParse checks if an event implements CmdParser; if it does, runs CmdParser. Else, runs default parser
+func handleParse(h Handler, content string) ([]string, error) {
 	var (
 		p  CmdParser
 		ok bool
 	)
-	if p, ok = c.(CmdParser); !ok {
+	if p, ok = h.(CmdParser); !ok {
 		return cmdParserDefault(content), nil
 	}
 
 	return p.Parse(content)
+}
+
+// handleResolve returns the Resolve func if Handler implements Resolver. Otherwise returns a Resolve func stub.
+func handleResolve(h Handler) func(ctx context.Context) {
+	if r, ok := h.(Resolver); ok {
+		return r.Resolve
+	}
+	return func(_ context.Context) {}
 }
 
 // handleMiddlewares runs each middleware in order until completion.
@@ -57,9 +64,11 @@ func trimPrefix(command, prefix string) (string, bool) {
 
 }
 
-// Route represents a command.
+// Route represents a command which consumes a DiscordGo MessageCreate event under the hood.
+//
+// Routes can be modified after they are added to the router, and are not goroutine safe.
 type Route struct {
-	c           Commander
+	h           Handler
 	p           Prefixer
 	aliases     []string
 	subroutes   []*Route
@@ -137,17 +146,17 @@ func (r *Route) Use(middlewares ...Middlewarer) *Route {
 	return r
 }
 
-// Do the execution of a Commander implementation when there is a Message Create event.
+// Do execution of the provided Handler when there is a Message Create event.
 // https://discord.com/developers/docs/topics/gateway#message-create
 //
 // A Commander can optionally implement CmdParser for custom parsing of message content.
-// Parsing errors will be handled by Resolve.
+// Handling errors and cleanup of other resources will be handled by Resolve if Resolver is implemented, otherwise skipped.
 //
-// No-ops if Commander is nil.
+// No-ops if Handler is nil.
 //
 // If Do is called multiple times, the previous Do call will be overwritten.
-func (r *Route) Do(c Commander) *Route {
-	r.c = c
+func (r *Route) Do(h Handler) *Route {
+	r.h = h
 	return r
 }
 
@@ -178,7 +187,7 @@ func createHandlerFunc(route *Route) handlerFunc {
 	if route == nil {
 		return nil
 	}
-	if route.c == nil {
+	if route.h == nil {
 		return nil
 	}
 
@@ -195,10 +204,10 @@ func createHandlerFunc(route *Route) handlerFunc {
 			return
 		}
 
-		args, err := handleParse(route.c, cmd)
+		args, err := handleParse(route.h, cmd)
 		if err != nil {
 			ctx = utils.WithErr(ctx, err)
-			route.c.Resolve(ctx)
+			handleResolve(route.h)(ctx)
 			return
 		}
 
@@ -212,16 +221,16 @@ func createHandlerFunc(route *Route) handlerFunc {
 
 		if err = handleMiddlewares(ctx, route.middlewares); err != nil {
 			ctx = utils.WithErr(ctx, err)
-			route.c.Resolve(ctx)
+			handleResolve(route.h)(ctx)
 			return
 		}
 
-		err = route.c.Handle(ctx)
+		err = route.h.Handle(ctx)
 		if err != nil {
 			ctx = utils.WithErr(ctx, err)
 		}
 
-		route.c.Resolve(ctx)
+		handleResolve(route.h)(ctx)
 
 	}
 }
