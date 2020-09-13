@@ -21,6 +21,70 @@ func TestRoute(t *testing.T) {
 						authorBot:  false,
 						authorID:   "author_id_1",
 						msgGuildID: "guild_id_1",
+						msgContent: "root sub1 subsub2 sub2 arg1 arg2",
+					},
+					msgContentTokenized: []string{"root", "sub1", "subsub2", "sub2", "arg1", "arg2"},
+					expectedDepth:       3,
+					expectedAliasTree:   []string{"root", "sub1", "sub1", "subsub1", "subsub2"},
+					expectedPrefix:      "",
+					expectedAlias:       []string{"root", "sub1", "subsub2"},
+					expectedArgs:        []string{"sub2", "arg1", "arg2"},
+					expectedErr:         nil,
+				},
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
+						msgContent: "root sub1 subsub1 sub2 arg1 arg2",
+					},
+					msgContentTokenized: []string{"root", "sub1", "subsub1", "sub2", "arg1", "arg2"},
+					expectedDepth:       3,
+					expectedAliasTree:   []string{"root", "sub1", "sub1", "subsub1", "subsub2"},
+					expectedPrefix:      "",
+					expectedAlias:       []string{"root", "sub1", "subsub1"},
+					expectedArgs:        []string{"sub2", "arg1", "arg2"},
+					expectedErr:         nil,
+				},
+			},
+			routeParams: &testRouteDefns{
+				aliases:     []string{"root"},
+				middlewares: nil,
+				subroutes: []*testRouteDefns{
+					{
+						aliases:     []string{"sub1"},
+						middlewares: nil,
+						subroutes: []*testRouteDefns{
+							{
+								aliases:     []string{"subsub1"},
+								middlewares: nil,
+								subroutes:   []*testRouteDefns{},
+							},
+						},
+					},
+					{
+						aliases:     []string{"sub1"},
+						middlewares: nil,
+						subroutes: []*testRouteDefns{
+							{
+								aliases:     []string{"subsub2"},
+								middlewares: nil,
+								subroutes:   []*testRouteDefns{},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			testIOParams: []*testIOParams{
+				{
+					sesParams: &mockSesParams{selfUserID: "self_id_1"},
+					msgParams: &mockMsgParams{
+						authorBot:  false,
+						authorID:   "author_id_1",
+						msgGuildID: "guild_id_1",
 						msgContent: "root sub1 subsub1 sub2 arg1 arg2",
 					},
 					msgContentTokenized: []string{"root", "sub1", "subsub1", "sub2", "arg1", "arg2"},
@@ -320,7 +384,7 @@ func TestRoute(t *testing.T) {
 						msgGuildID: "guild_id_1",
 						msgContent: "root s hi there",
 					},
-					msgContentTokenized: []string{},
+					msgContentTokenized: []string{"root", "s", "hi", "there"},
 					expectedDepth:       0,
 					expectedAliasTree:   []string{},
 					expectedPrefix:      "",
@@ -364,7 +428,7 @@ func TestRoute(t *testing.T) {
 			})
 			t.Run("test findRoute algorithm", func(t *testing.T) {
 				rr := tt.createRoute()
-				found, depth := findRoute(rr, io.msgContentTokenized)
+				found, depth := findRouteRecursive(rr, io.msgContentTokenized, 1)
 				if depth != io.expectedDepth {
 					t.Errorf("got %d, want %d", depth, io.expectedDepth)
 				}
