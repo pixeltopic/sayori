@@ -3,10 +3,145 @@ package v2
 import (
 	"testing"
 
+	"github.com/bwmarrin/discordgo"
+
 	"github.com/pixeltopic/sayori/v2/utils"
 
 	"context"
 )
+
+func makeMockMsg(content string) *discordgo.MessageCreate {
+	message := &discordgo.Message{
+		Author: &discordgo.User{
+			ID:  "author_id_1",
+			Bot: false,
+		},
+		Content: content,
+		GuildID: "guild_id_1",
+	}
+
+	return &discordgo.MessageCreate{
+		Message: message,
+	}
+}
+
+func makeMockSes() *discordgo.Session {
+	state := discordgo.NewState()
+	state.User = &discordgo.User{ID: "self_id_1"}
+	session := &discordgo.Session{
+		State: state,
+	}
+
+	return session
+}
+
+// Note: If the message content arg does not match root, it will exit the test case without running any tests!
+func TestRoute_createHandlerFunc(t *testing.T) {
+	type subCase struct {
+		content        string
+		expectedDepth  int // depth of a subcommand token (zero indexed)
+		expectedPrefix string
+		expectedErr    error // error the ctx should contain
+		expectedCmdID  int
+	}
+	type testCase struct {
+		route    func(c subCase, t *testing.T) *Route
+		subCases []subCase
+	}
+
+	createCmd := func(id int, c subCase, t *testing.T) *testCmd {
+		testFunc := func(ctx context.Context) {
+			cmd := CmdFromContext(ctx)
+
+			if c.expectedCmdID != id {
+				t.Errorf("expected cmd ID to be equal, got %d, want %d", id, c.expectedCmdID)
+			}
+
+			if cmd.Prefix != c.expectedPrefix {
+				t.Errorf("expected prefix to be equal, got %s, want %s", cmd.Prefix, c.expectedPrefix)
+			}
+
+			if c.expectedDepth != len(cmd.Alias) {
+				t.Errorf("expected depth (%d) to equal length of context alias (%d)", c.expectedDepth, len(cmd.Alias))
+			}
+
+			toks := cmdParserDefault(c.content)
+			if !strSliceEqual(toks[:c.expectedDepth], cmd.Alias, false) {
+				t.Errorf("expected alias %v to be equal to %v", toks[:c.expectedDepth], cmd.Alias)
+			}
+			if !strSliceEqual(toks[c.expectedDepth:], cmd.Args, false) {
+				t.Errorf("expected args %v to be equal %v", toks[c.expectedDepth:], cmd.Args)
+			}
+		}
+		handleCB := func(ctx context.Context) error {
+			testFunc(ctx)
+			return c.expectedErr
+		}
+
+		resolveCB := func(ctx context.Context) {
+			cmd := CmdFromContext(ctx)
+
+			if cmd.Err != nil && cmd.Err.Error() != c.expectedErr.Error() {
+				t.Errorf("expected err to be equal, got %v, want %v", cmd.Err, c.expectedErr)
+			}
+			if cmd.Err == nil && c.expectedErr == nil {
+				// fields here will only be valid if err was nil (this will not be run, if say - a parser or middleware err'd
+				testFunc(ctx)
+			}
+		}
+
+		return &testCmd{
+			HandleCallback:  handleCB,
+			ResolveCallback: resolveCB,
+			ParseCallback:   func(cmd string) ([]string, error) { return cmdParserDefault(cmd), nil },
+		}
+	}
+
+	testCases := []testCase{
+		{
+			route: func(c subCase, t *testing.T) *Route {
+				r := NewRoute(nil).On("root").Do(createCmd(0, c, t))
+				sub1A := NewRoute(nil).On("sub1").Do(createCmd(1, c, t)).Has(
+					NewRoute(nil).On("subsub1").Do(createCmd(3, c, t)),
+				)
+				sub1B := NewRoute(nil).On("sub1").Do(createCmd(2, c, t)).Has(
+					NewRoute(nil).On("subsub2").Do(createCmd(4, c, t)),
+				)
+				r.Has(sub1A, sub1B)
+				return r
+			},
+			subCases: []subCase{
+				{
+					content:        "root sub1 subsub2 sub2 arg1 arg2",
+					expectedDepth:  3,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  4,
+				},
+				{
+					content:        "root sub1 subsub1 sub2 arg1 arg2",
+					expectedDepth:  3,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  3,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		for _, c := range tc.subCases {
+			ctx := context.Background()
+			msgCreate := makeMockMsg(c.content)
+			ses := makeMockSes()
+
+			route := tc.route(c, t)
+
+			createHandlerFunc(route)(utils.WithSes(utils.WithMsg(ctx, msgCreate.Message), ses))
+		}
+	}
+
+}
 
 // TODO: table driven test where messages are in a slice and we have one big testRouteDefns to test?
 // In addition we can test multiple testRouteDefns too
