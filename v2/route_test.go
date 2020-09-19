@@ -38,6 +38,7 @@ func makeMockSes() *discordgo.Session {
 // Note: If the message content arg does not match root, it will exit the test case without running any tests!
 func TestRoute_createHandlerFunc(t *testing.T) {
 	type subCase struct {
+		name           string // descriptive string describing what the test case is doing
 		content        string
 		expectedDepth  int // depth of a subcommand token (zero indexed)
 		expectedPrefix string
@@ -45,8 +46,9 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 		expectedCmdID  int
 	}
 	type testCase struct {
-		route    func(c subCase, t *testing.T) *Route
-		subCases []subCase
+		route     func(c subCase, t *testing.T) *Route
+		aliasTree []string // registered aliases in the route and all subroutes. Must include duplicates and order does not matter
+		subCases  []subCase
 	}
 
 	createCmd := func(id int, c subCase, t *testing.T) *testCmd {
@@ -110,8 +112,10 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 				r.Has(sub1A, sub1B)
 				return r
 			},
+			aliasTree: []string{"root", "sub1", "sub1", "subsub1", "subsub2"},
 			subCases: []subCase{
 				{
+					name:           "common aliases shared between routes in the same depth should properly route to the correct subroute",
 					content:        "root sub1 subsub2 sub2 arg1 arg2",
 					expectedDepth:  3,
 					expectedPrefix: "",
@@ -119,6 +123,7 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 					expectedCmdID:  4,
 				},
 				{
+					name:           "common aliases shared between routes in the same depth should properly route to the correct subroute",
 					content:        "root sub1 subsub1 sub2 arg1 arg2",
 					expectedDepth:  3,
 					expectedPrefix: "",
@@ -131,13 +136,32 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 
 	for _, tc := range testCases {
 		for _, c := range tc.subCases {
+			// create test route
+			route := tc.route(c, t)
+
+			// first, test the route finding algorithm itself.
+			rr, depth := findRouteRecursive(route, cmdParserDefault(c.content), 1)
+			if depth != c.expectedDepth {
+				t.Errorf("findRouteRecursive returned unexpected depth, got %d, want %d", depth, c.expectedDepth)
+			}
+			if rr == nil && c.expectedDepth != 0 {
+				t.Errorf("expected non-nil route because expectedDepth was %v, but route was nil", c.expectedDepth)
+				continue
+			}
+
 			ctx := context.Background()
 			msgCreate := makeMockMsg(c.content)
 			ses := makeMockSes()
 
-			route := tc.route(c, t)
-
+			// next, test that context is passed down to handlers properly
 			createHandlerFunc(route)(utils.WithSes(utils.WithMsg(ctx, msgCreate.Message), ses))
+
+			// lastly ensure the route contains all expected aliases.
+			found := testGetAllAliasRecursively(route)
+			if !strSliceEqual(tc.aliasTree, found, true) {
+				t.Errorf("expected alias tree to be equal; got %v, want %v", found, tc.aliasTree)
+			}
+
 		}
 	}
 
