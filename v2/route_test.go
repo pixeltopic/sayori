@@ -106,14 +106,14 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 	testCases := []testCase{
 		{
 			route: func(c subCase, t *testing.T) *Route {
-				r := NewRoute(nil).On("root").Do(createCmd(0, c, t))
-				sub1A := NewSubroute().On("sub1").Do(createCmd(1, c, t)).Has(
-					NewSubroute().On("subsub1").Do(createCmd(3, c, t)),
+				r := NewRoute(nil).On("root").Do(createCmd(0, c, t)).Has(
+					NewSubroute().On("sub1").Do(createCmd(1, c, t)).Has(
+						NewSubroute().On("subsub1").Do(createCmd(3, c, t)),
+					),
+					NewSubroute().On("sub1").Do(createCmd(2, c, t)).Has(
+						NewSubroute().On("subsub2").Do(createCmd(4, c, t)),
+					),
 				)
-				sub1B := NewSubroute().On("sub1").Do(createCmd(2, c, t)).Has(
-					NewSubroute().On("subsub2").Do(createCmd(4, c, t)),
-				)
-				r.Has(sub1A, sub1B)
 				return r
 			},
 			aliasTree: []string{"root", "sub1", "sub1", "subsub1", "subsub2"},
@@ -141,6 +141,41 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 					expectedPrefix: "",
 					expectedErr:    nil,
 					expectedCmdID:  3,
+				},
+			},
+		},
+		{
+			route: func(c subCase, t *testing.T) *Route {
+				r := NewRoute(nil).On("root").Do(createCmd(0, c, t)).Has(
+					NewSubroute().On("sub1").Do(createCmd(1, c, t)).Has(
+						NewSubroute().On("subsub1").Do(createCmd(3, c, t)).Has(
+							NewSubroute().On("sub1").Do(createCmd(5, c, t)),
+						),
+					),
+					NewSubroute().On("sub1").Do(createCmd(2, c, t)).Has(
+						NewSubroute().On("subsub1").Do(createCmd(4, c, t)),
+					),
+				)
+
+				return r
+			},
+			aliasTree: []string{"root", "sub1", "sub1", "subsub1", "subsub1", "sub1"},
+			subCases: []subCase{
+				{
+					name:           "deepest sub1 shall be selected",
+					content:        "root sub1 subsub1 sub1",
+					expectedDepth:  4,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  5,
+				},
+				{
+					name:           "newest subsub1 shall be selected",
+					content:        "root sub1 subsub1",
+					expectedDepth:  3,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  4,
 				},
 			},
 		},
