@@ -311,14 +311,11 @@ func findRouteRecursive(route *Route, args []string, depth int) (*Route, int) {
 		return nil, depth - 1
 	}
 
-	var (
-		newRoute             *Route
-		newDepth, finalDepth int
-	)
+	finalDepth := depth // finalDepth is a temp variable so depth does not get reassigned, invalidating subsequent iterations
 
 	if depth < len(args) {
 		for _, sr := range route.FindAllSubroutes(args[depth]) {
-			newRoute, newDepth = findRouteRecursive(sr, args, depth+1)
+			newRoute, newDepth := findRouteRecursive(sr, args, depth+1)
 
 			// depth check prevents shallower subroutes from overwriting a better match.
 			// <= will prioritize most recently added subroutes while < will prioritize least recently added
@@ -326,10 +323,6 @@ func findRouteRecursive(route *Route, args []string, depth int) (*Route, int) {
 				route, finalDepth = newRoute, newDepth
 			}
 		}
-	}
-
-	if finalDepth == 0 {
-		finalDepth = depth
 	}
 
 	return route, finalDepth

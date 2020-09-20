@@ -120,6 +120,14 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 			aliasTree: []string{"root", "sub1", "sub1", "subsub1", "subsub2"},
 			subCases: []subCase{
 				{
+					name:           "alias tiebreak will result in most recently added route being selected",
+					content:        "root sub1",
+					expectedDepth:  2,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  2,
+				},
+				{
 					name:           "common aliases shared between routes in the same depth should properly route to the correct subroute",
 					content:        "root sub1 subsub2 sub2 arg1 arg2",
 					expectedDepth:  3,
