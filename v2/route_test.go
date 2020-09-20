@@ -108,11 +108,11 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 		{
 			route: func(c subCase, t *testing.T) *Route {
 				r := NewRoute(nil).On("root").Do(createCmd(0, c, t))
-				sub1A := NewRoute(nil).On("sub1").Do(createCmd(1, c, t)).Has(
-					NewRoute(nil).On("subsub1").Do(createCmd(3, c, t)),
+				sub1A := NewSubroute().On("sub1").Do(createCmd(1, c, t)).Has(
+					NewSubroute().On("subsub1").Do(createCmd(3, c, t)),
 				)
-				sub1B := NewRoute(nil).On("sub1").Do(createCmd(2, c, t)).Has(
-					NewRoute(nil).On("subsub2").Do(createCmd(4, c, t)),
+				sub1B := NewSubroute().On("sub1").Do(createCmd(2, c, t)).Has(
+					NewSubroute().On("subsub2").Do(createCmd(4, c, t)),
 				)
 				r.Has(sub1A, sub1B)
 				return r
@@ -148,10 +148,10 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 		{
 			route: func(c subCase, t *testing.T) *Route {
 				r := NewRoute(nil).On("root").Do(createCmd(0, c, t))
-				sub1A := NewRoute(nil).On("sub1").Do(createCmd(1, c, t)).Has(
-					NewRoute(nil).On("subsub1").Do(createCmd(3, c, t)),
+				sub1A := NewSubroute().On("sub1").Do(createCmd(1, c, t)).Has(
+					NewSubroute().On("subsub1").Do(createCmd(3, c, t)),
 				)
-				sub1B := NewRoute(nil).On("sub2").Do(createCmd(2, c, t))
+				sub1B := NewSubroute().On("sub2").Do(createCmd(2, c, t))
 				r.Has(sub1A, sub1B)
 				return r
 			},
@@ -186,10 +186,10 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 		{
 			route: func(c subCase, t *testing.T) *Route {
 				r := NewRoute(&testPref{}).On("root").Do(createCmd(0, c, t))
-				r1 := NewRoute(nil).On("sub", "sub1", "s").Do(createCmd(1, c, t)).Has(
-					NewRoute(nil).On("subsub1", "ss1").Do(createCmd(2, c, t)),
-					NewRoute(nil).On("subsub2").Do(createCmd(3, c, t)),
-					NewRoute(nil).On("subsub3", "sub").Do(createCmd(4, c, t)),
+				r1 := NewSubroute().On("sub", "sub1", "s").Do(createCmd(1, c, t)).Has(
+					NewSubroute().On("subsub1", "ss1").Do(createCmd(2, c, t)),
+					NewSubroute().On("subsub2").Do(createCmd(3, c, t)),
+					NewSubroute().On("subsub3", "sub").Do(createCmd(4, c, t)),
 				)
 				r.Has(r1)
 				return r
@@ -227,6 +227,121 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 					expectedPrefix: testDefaultPrefix,
 					expectedErr:    nil,
 					expectedCmdID:  -1,
+				},
+			},
+		},
+		{
+			route: func(c subCase, t *testing.T) *Route {
+				r := NewRoute(&testPref{}).On().Do(createCmd(1, c, t))
+				return r
+			},
+			aliasTree: []string{},
+			subCases: []subCase{
+				{
+					name:           "valid prefix and a default route should return all tokens as args, without the prefix",
+					content:        testDefaultPrefix + "root s hi there",
+					expectedDepth:  0,
+					expectedPrefix: testDefaultPrefix,
+					expectedErr:    nil,
+					expectedCmdID:  1,
+				},
+				{
+					name:           "invalid prefix will not run despite being default route",
+					content:        "root s hi there",
+					expectedDepth:  0,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  -1,
+				},
+			},
+		},
+		{
+			route: func(c subCase, t *testing.T) *Route {
+				r := NewSubroute().On().Do(createCmd(1, c, t))
+				r1 := NewSubroute().On("sub").Do(createCmd(2, c, t))
+				r.Has(r1)
+				return r
+			},
+			aliasTree: []string{"sub"},
+			subCases: []subCase{
+				{
+					name:           "should run the first handler as there is no aliases, hence gets auto-selected",
+					content:        testDefaultPrefix + "sub sub hi there",
+					expectedDepth:  0,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  1,
+				},
+			},
+		},
+		{
+			route: func(c subCase, t *testing.T) *Route {
+				r := NewSubroute().On("root").Do(createCmd(1, c, t)).Has(
+					NewSubroute().On("sub").Do(createCmd(2, c, t)).Has(
+						NewSubroute().Do(createCmd(3, c, t)),
+					),
+				)
+
+				return r
+			},
+			aliasTree: []string{"root", "sub"},
+			subCases: []subCase{
+				{
+					name:           "should ignore the route with no aliases and use the last valid parent instead",
+					content:        "root sub subsub",
+					expectedDepth:  2,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  2,
+				},
+				{
+					name:           "should fail to route to any handler",
+					content:        testDefaultPrefix + "root sub subsub",
+					expectedDepth:  0,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  -1,
+				},
+			},
+		},
+		{
+			route: func(c subCase, t *testing.T) *Route {
+				r := NewSubroute().On("root").Do(createCmd(0, c, t)).Has(
+					NewSubroute().On("sub", "s").Do(createCmd(1, c, t)).Has(
+						NewSubroute().Do(createCmd(2, c, t)),
+					),
+					NewSubroute().On().Do(createCmd(3, c, t)).Has(
+						NewSubroute().On("subsub1").Do(createCmd(4, c, t)),
+					),
+				)
+
+				return r
+			},
+			aliasTree: []string{"root", "sub", "s", "subsub1"},
+			subCases: []subCase{
+				{
+					name:           "default route should be ignored",
+					content:        "root s hi there",
+					expectedDepth:  2,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  1,
+				},
+				{
+					name:           "default route and its subroutes should be ignored",
+					content:        "root arg subsub1 arg",
+					expectedDepth:  1,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  0,
+				},
+				{
+					name:           "default route and its subroutes should be ignored",
+					content:        "root subsub1 arg",
+					expectedDepth:  1,
+					expectedPrefix: "",
+					expectedErr:    nil,
+					expectedCmdID:  0,
 				},
 			},
 		},
@@ -273,159 +388,7 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 // In addition we can test multiple testRouteDefns too
 // Need to find a good way to store expected test results
 func TestRoute(t *testing.T) {
-	testTrees := []*testParams{
-		{
-			testIOParams: []*testIOParams{
-				// tests a default route with a subroute which should not be considered.
-				{
-					sesParams: &mockSesParams{selfUserID: "self_id_1"},
-					msgParams: &mockMsgParams{
-						authorBot:  false,
-						authorID:   "author_id_1",
-						msgGuildID: "guild_id_1",
-						msgContent: testDefaultPrefix + "sub sub hi there",
-					},
-					msgContentTokenized: []string{testDefaultPrefix + "sub", "sub", "hi", "there"},
-					expectedDepth:       0,
-					expectedAliasTree:   []string{"sub"},
-					expectedPrefix:      "",
-					expectedAlias:       []string{},
-					expectedArgs:        []string{testDefaultPrefix + "sub", "sub", "hi", "there"},
-					expectedErr:         nil,
-				},
-			},
-			routeParams: &testRouteDefns{
-				aliases: []string{},
-				subroutes: []*testRouteDefns{
-					{
-						aliases:   []string{"sub"},
-						subroutes: []*testRouteDefns{},
-					},
-				},
-			},
-		},
-		{
-			testIOParams: []*testIOParams{
-				// Default route should be ignored
-				{
-					sesParams: &mockSesParams{selfUserID: "self_id_1"},
-					msgParams: &mockMsgParams{
-						authorBot:  false,
-						authorID:   "author_id_1",
-						msgGuildID: "guild_id_1",
-						msgContent: "root s hi there",
-					},
-					msgContentTokenized: []string{"root", "s", "hi", "there"},
-					expectedDepth:       2,
-					expectedAliasTree:   []string{"root", "sub", "s", "subsub1"},
-					expectedPrefix:      "",
-					expectedAlias:       []string{"root", "s"},
-					expectedArgs:        []string{"hi", "there"},
-					expectedErr:         nil,
-				},
-				// Default route and its subroutes should be ignored
-				{
-					sesParams: &mockSesParams{selfUserID: "self_id_1"},
-					msgParams: &mockMsgParams{
-						authorBot:  false,
-						authorID:   "author_id_1",
-						msgGuildID: "guild_id_1",
-						msgContent: "root arg subsub1 arg",
-					},
-					msgContentTokenized: []string{"root", "arg", "subsub1", "arg"},
-					expectedDepth:       1,
-					expectedAliasTree:   []string{"root", "sub", "s", "subsub1"},
-					expectedPrefix:      "",
-					expectedAlias:       []string{"root"},
-					expectedArgs:        []string{"arg", "subsub1", "arg"},
-					expectedErr:         nil,
-				},
-				// Default route and its subroutes should be ignored
-				{
-					sesParams: &mockSesParams{selfUserID: "self_id_1"},
-					msgParams: &mockMsgParams{
-						authorBot:  false,
-						authorID:   "author_id_1",
-						msgGuildID: "guild_id_1",
-						msgContent: "root subsub1 arg",
-					},
-					msgContentTokenized: []string{"root", "subsub1", "arg"},
-					expectedDepth:       1,
-					expectedAliasTree:   []string{"root", "sub", "s", "subsub1"},
-					expectedPrefix:      "",
-					expectedAlias:       []string{"root"},
-					expectedArgs:        []string{"subsub1", "arg"},
-					expectedErr:         nil,
-				},
-			},
-			routeParams: &testRouteDefns{
-				aliases: []string{"root"},
-				subroutes: []*testRouteDefns{
-					{
-						aliases: []string{"sub", "s"},
-						subroutes: []*testRouteDefns{
-							{
-								aliases:   []string{},
-								subroutes: []*testRouteDefns{},
-							},
-						},
-					},
-					{
-						aliases: []string{},
-						subroutes: []*testRouteDefns{
-							{
-								aliases:   []string{"subsub1"},
-								subroutes: []*testRouteDefns{},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			testIOParams: []*testIOParams{
-				// Default route with a correct prefixer will return all tokens as args
-				{
-					sesParams: &mockSesParams{selfUserID: "self_id_1"},
-					msgParams: &mockMsgParams{
-						authorBot:  false,
-						authorID:   "author_id_1",
-						msgGuildID: "guild_id_1",
-						msgContent: testDefaultPrefix + "root s hi there",
-					},
-					msgContentTokenized: []string{"root", "s", "hi", "there"},
-					expectedDepth:       0,
-					expectedAliasTree:   []string{},
-					expectedPrefix:      testDefaultPrefix,
-					expectedAlias:       []string{},
-					expectedArgs:        []string{"root", "s", "hi", "there"},
-					expectedErr:         nil,
-				},
-				// Default route with invalid prefix will not run
-				{
-					sesParams: &mockSesParams{selfUserID: "self_id_1"},
-					msgParams: &mockMsgParams{
-						authorBot:  false,
-						authorID:   "author_id_1",
-						msgGuildID: "guild_id_1",
-						msgContent: "root s hi there",
-					},
-					msgContentTokenized: []string{"root", "s", "hi", "there"},
-					expectedDepth:       0,
-					expectedAliasTree:   []string{},
-					expectedPrefix:      "",
-					expectedAlias:       []string{},
-					expectedArgs:        []string{},
-					expectedErr:         nil,
-				},
-			},
-			routeParams: &testRouteDefns{
-				p:         &testPref{},
-				aliases:   []string{},
-				subroutes: []*testRouteDefns{},
-			},
-		},
-	}
+	testTrees := []*testParams{}
 
 	for _, tt := range testTrees {
 		for _, io := range tt.testIOParams {

@@ -75,8 +75,9 @@ type Route struct {
 	middlewares []Middlewarer
 }
 
-// IsDefault returns true if a route will always be executed when Discord produces a Message Create event
-// with respect to the Prefixer (if provided).
+// IsDefault returns true if a route has no aliases assigned.
+// If the route has no Prefixer bound and IsDefault returns true, the Handler will
+// always be executed when Discord produces a DiscordGo MessageCreate event.
 //
 // https://discord.com/developers/docs/topics/gateway#message-create
 //
@@ -137,6 +138,8 @@ func (r *Route) getGuildPrefix(guildID string) string {
 
 // On adds new identifiers for a Route.
 // By default, aliases with whitespaces will not be matched unless a Commander also implements the CmdParser interface
+//
+// If a subroute returns true with IsDefault, it will be auto-selected when searching for the proper route.
 func (r *Route) On(aliases ...string) *Route {
 	r.aliases = append(r.aliases, aliases...)
 	return r
@@ -178,6 +181,15 @@ func (r *Route) Do(h Handler) *Route {
 func NewRoute(p Prefixer) *Route {
 	return &Route{
 		p:           p,
+		aliases:     []string{},
+		subroutes:   []*Route{},
+		middlewares: []Middlewarer{},
+	}
+}
+
+// NewSubroute returns a new Route without a Prefixer. Is equivalent to NewRoute(nil).
+func NewSubroute() *Route {
+	return &Route{
 		aliases:     []string{},
 		subroutes:   []*Route{},
 		middlewares: []Middlewarer{},
