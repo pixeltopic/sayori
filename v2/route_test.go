@@ -1,14 +1,13 @@
 package v2
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/pixeltopic/sayori/v2/utils"
-
-	"context"
 )
 
 func makeMockMsg(content string) *discordgo.MessageCreate {
@@ -382,49 +381,4 @@ func TestRoute_createHandlerFunc(t *testing.T) {
 		}
 	}
 
-}
-
-// TODO: table driven test where messages are in a slice and we have one big testRouteDefns to test?
-// In addition we can test multiple testRouteDefns too
-// Need to find a good way to store expected test results
-func TestRoute(t *testing.T) {
-	testTrees := []*testParams{}
-
-	for _, tt := range testTrees {
-		for _, io := range tt.testIOParams {
-			t.Run("test handler func", func(t *testing.T) {
-				rr := tt.createRouteWithTestIOParams(io, t)
-				ctx := context.Background()
-				msgCreate, err := io.createMockMsg()
-				if err != nil {
-					t.FailNow()
-				}
-
-				ses, err := io.createMockSes()
-				if err != nil {
-					t.FailNow()
-				}
-
-				createHandlerFunc(rr)(utils.WithSes(utils.WithMsg(ctx, msgCreate.Message), ses))
-			})
-
-			t.Run("test that all aliases in the route tree are present", func(t *testing.T) {
-				rr := tt.createRoute()
-				found := testGetAllAliasRecursively(rr)
-				if !strSliceEqual(io.expectedAliasTree, found, true) {
-					t.Errorf("expected alias tree to be equal; got %v, want %v", found, io.expectedAliasTree)
-				}
-			})
-			t.Run("test findRoute algorithm", func(t *testing.T) {
-				rr := tt.createRoute()
-				found, depth := findRouteRecursive(rr, io.msgContentTokenized, 1)
-				if depth != io.expectedDepth {
-					t.Errorf("got %d, want %d", depth, io.expectedDepth)
-				}
-				if found == nil && io.expectedDepth != 0 {
-					t.Error("expected non-nil route")
-				}
-			})
-		}
-	}
 }
