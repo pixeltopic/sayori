@@ -75,8 +75,9 @@ type Route struct {
 	middlewares []Middlewarer
 }
 
-// IsDefault returns true if a route will always be executed when Discord produces a Message Create event
-// with respect to the Prefixer (if provided).
+// IsDefault returns true if a route has no aliases assigned.
+// If the route has no Prefixer bound and IsDefault returns true, the Handler will
+// always be executed when Discord produces a DiscordGo MessageCreate event.
 //
 // https://discord.com/developers/docs/topics/gateway#message-create
 //
@@ -111,6 +112,17 @@ func (r *Route) Find(subAlias string) *Route {
 	return nil
 }
 
+// FindAllSubroutes the all applicable subroutes of this route matching the given subroute alias
+// from its immediate children
+func (r *Route) FindAllSubroutes(subAlias string) (routes []*Route) {
+	for _, sub := range r.subroutes {
+		if sub.HasAlias(subAlias) {
+			routes = append(routes, sub)
+		}
+	}
+	return
+}
+
 // getGuildPrefix returns guildID's custom prefix or if none,
 // returns default prefix
 func (r *Route) getGuildPrefix(guildID string) string {
@@ -126,6 +138,8 @@ func (r *Route) getGuildPrefix(guildID string) string {
 
 // On adds new identifiers for a Route.
 // By default, aliases with whitespaces will not be matched unless a Commander also implements the CmdParser interface
+//
+// If a subroute returns true with IsDefault, it will be auto-selected when searching for the proper route.
 func (r *Route) On(aliases ...string) *Route {
 	r.aliases = append(r.aliases, aliases...)
 	return r
@@ -173,6 +187,15 @@ func NewRoute(p Prefixer) *Route {
 	}
 }
 
+// NewSubroute returns a new Route without a Prefixer. Is equivalent to NewRoute(nil).
+func NewSubroute() *Route {
+	return &Route{
+		aliases:     []string{},
+		subroutes:   []*Route{},
+		middlewares: []Middlewarer{},
+	}
+}
+
 // createHandlerFunc returns a HandlerFunc which is a wrapper around the given Commander.
 // A handlerFunc is only executed on the on a root level route.
 // If subroute, will only access its respective Handle and Resolve
@@ -211,7 +234,7 @@ func createHandlerFunc(route *Route) handlerFunc {
 			return
 		}
 
-		route, depth := findRoute(route, args)
+		route, depth := findRouteRecursive(route, args, 1)
 		if route == nil {
 			return
 		}
@@ -271,4 +294,48 @@ func findRoute(route *Route, args []string) (*Route, int) {
 	}
 
 	return route, depth
+}
+
+// findRouteRecursive finds the deepest subroute and returns it along with the depth.
+// a depth of zero means there is no route that matches provided args
+// the value of depth is equal to the number of aliases.
+//
+// Unlike findRoute, it scans the ENTIRE command tree for the first valid match. Meaning if there are duplicate subroutes (with identical aliases)
+// it will "merge" the subroutes' subroutes on a first-in-first-called basis
+//
+// initial depth MUST be 1
+func findRouteRecursive(route *Route, args []string, depth int) (*Route, int) {
+	if depth <= 0 {
+		return nil, 0
+	}
+
+	if len(args) == 0 || route == nil {
+		return nil, depth - 1
+	}
+
+	// no aliases means this is an event handler so immediately return
+	if route.IsDefault() {
+		return route, depth - 1
+	}
+
+	// more recent arg must be an alias of current route. this should only ever fail on a root route.
+	if !route.HasAlias(args[depth-1]) {
+		return nil, depth - 1
+	}
+
+	finalDepth := depth // finalDepth is a temp variable so depth does not get reassigned, invalidating subsequent iterations
+
+	if depth < len(args) {
+		for _, sr := range route.FindAllSubroutes(args[depth]) {
+			newRoute, newDepth := findRouteRecursive(sr, args, depth+1)
+
+			// depth check prevents shallower subroutes from overwriting a better match.
+			// <= will prioritize most recently added subroutes while < will prioritize least recently added
+			if finalDepth <= newDepth && newRoute != nil {
+				route, finalDepth = newRoute, newDepth
+			}
+		}
+	}
+
+	return route, finalDepth
 }

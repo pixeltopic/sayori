@@ -106,14 +106,14 @@ func (p *testIOParams) createCmd(t *testing.T) *testCmd {
 		}
 
 		if p.expectedDepth != len(cmd.Alias) {
-			t.Error("expected depth to equal length of context alias")
+			t.Errorf("expected depth (%d) to equal length of context alias (%d)", p.expectedDepth, len(cmd.Alias))
 		}
 
 		if !strSliceEqual(p.expectedAlias, cmd.Alias, false) {
-			t.Error("expected alias to be equal")
+			t.Errorf("expected alias %v to be equal to %v", p.expectedAlias, cmd.Alias)
 		}
 		if !strSliceEqual(p.expectedArgs, cmd.Args, false) {
-			t.Error("expected args to be equal")
+			t.Errorf("expected args %v to be equal %v", p.expectedArgs, cmd.Args)
 		}
 	}
 	handleCB := func(ctx context.Context) error {
