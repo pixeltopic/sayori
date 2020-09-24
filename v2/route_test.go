@@ -44,6 +44,12 @@ func TestRoute_copyRoute(t *testing.T) {
 	// initialize copied route
 	copiedRoute := copyRoute(*route)
 
+	// assignment should not affect original
+	copiedRoute.p = nil
+	if copiedRoute.p == route.p {
+		t.Errorf("Route and copied route should not have the same prefixer value")
+	}
+
 	// all values should be equal
 	if !strSliceEqual(route.aliases, copiedRoute.aliases, false) {
 		t.Errorf("Route and copied route should be equal, but route=%v and copiedRoute=%v", route.aliases, copiedRoute.aliases)
