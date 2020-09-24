@@ -100,10 +100,39 @@ func (r *Route) HasAlias(a string) bool {
 	return false
 }
 
-// Find the first subroute of this route matching the given subroute alias.
+// copyRoute performs a shallow copy on the given route.
+func copyRoute(r Route) Route {
+	aliasesCopy := make([]string, len(r.aliases))
+	subrouteCopy := make([]*Route, len(r.subroutes))
+	// acceptable to not recursively copy as subroutes can never be directly accessed outside of package
+	mwCopy := make([]Middlewarer, len(r.middlewares))
+	copy(aliasesCopy, r.aliases)
+	copy(subrouteCopy, r.subroutes)
+	copy(mwCopy, r.middlewares)
+
+	return Route{
+		h:           r.h,
+		p:           r.p,
+		aliases:     aliasesCopy,
+		subroutes:   subrouteCopy,
+		middlewares: mwCopy,
+	}
+}
+
+// GetRoute returns immediate subroute(s) matching the given subroute alias.
+func (r *Route) GetRoute(a string) (routes []Route, ok bool) {
+	for _, sr := range r.subroutes {
+		if sr.HasAlias(a) {
+			routes = append(routes, copyRoute(*sr))
+		}
+	}
+	return routes, len(routes) > 0
+}
+
+// find the first subroute of this route matching the given subroute alias.
 // Subroute match is prioritized by order of the subroute appends.
 // If alias is not found, will return nil.
-func (r *Route) Find(subAlias string) *Route {
+func (r *Route) find(subAlias string) *Route {
 	for _, sub := range r.subroutes {
 		if sub.HasAlias(subAlias) {
 			return sub
@@ -112,9 +141,9 @@ func (r *Route) Find(subAlias string) *Route {
 	return nil
 }
 
-// FindAllSubroutes the all applicable subroutes of this route matching the given subroute alias
+// findAllSubroutes the all applicable subroutes of this route matching the given subroute alias
 // from its immediate children
-func (r *Route) FindAllSubroutes(subAlias string) (routes []*Route) {
+func (r *Route) findAllSubroutes(subAlias string) (routes []*Route) {
 	for _, sub := range r.subroutes {
 		if sub.HasAlias(subAlias) {
 			routes = append(routes, sub)
@@ -146,9 +175,13 @@ func (r *Route) On(aliases ...string) *Route {
 }
 
 // Has binds subroutes to the current route.
-// Subroutes with duplicate aliases will be prioritized in order of which they were added.
+// Subroutes with duplicate aliases will be prioritized in order of last added to first added.
+// Added routes will be shallow copied to discourage future modification of subroutes.
 func (r *Route) Has(subroutes ...*Route) *Route {
-	r.subroutes = append(r.subroutes, subroutes...)
+	for _, sr := range subroutes {
+		temp := copyRoute(*sr)
+		r.subroutes = append(r.subroutes, &temp)
+	}
 	return r
 }
 
@@ -283,7 +316,7 @@ func findRoute(route *Route, args []string) (*Route, int) {
 
 		// finds a subroute matching the token from a given route; if no match returns nil
 		// will not match subroutes that have no aliases.
-		subroute := route.Find(args[depth])
+		subroute := route.find(args[depth])
 
 		if subroute == nil {
 			return route, depth
@@ -326,7 +359,7 @@ func findRouteRecursive(route *Route, args []string, depth int) (*Route, int) {
 	finalDepth := depth // finalDepth is a temp variable so depth does not get reassigned, invalidating subsequent iterations
 
 	if depth < len(args) {
-		for _, sr := range route.FindAllSubroutes(args[depth]) {
+		for _, sr := range route.findAllSubroutes(args[depth]) {
 			newRoute, newDepth := findRouteRecursive(sr, args, depth+1)
 
 			// depth check prevents shallower subroutes from overwriting a better match.

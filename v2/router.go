@@ -37,30 +37,22 @@ func (r *Router) HasOnceDefault(h interface{}) func() {
 	return r.addHandlerOnce(h)
 }
 
-func makeHandlerForDgo(route *Route) func(*discordgo.Session, *discordgo.MessageCreate) {
+func makeHandlerForDgo(route Route) func(*discordgo.Session, *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		ctx := context.Background()
 
 		// finds deepest subroute and executes its handler with an accumulated context
-		createHandlerFunc(route)(utils.WithSes(utils.WithMsg(ctx, m.Message), s))
+		createHandlerFunc(&route)(utils.WithSes(utils.WithMsg(ctx, m.Message), s))
 	}
 }
 
 // Has binds a Route to the Router.
-func (r *Router) Has(route *Route) func() {
-	if route == nil {
-		return nil
-	}
-
+func (r *Router) Has(route Route) func() {
 	return r.addHandler(makeHandlerForDgo(route))
 }
 
 // HasOnce binds binds a Route to the Router, but the route will only fire at most once.
-func (r *Router) HasOnce(route *Route) func() {
-	if route == nil {
-		return nil
-	}
-
+func (r *Router) HasOnce(route Route) func() {
 	return r.addHandlerOnce(makeHandlerForDgo(route))
 }
 

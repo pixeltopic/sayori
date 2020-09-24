@@ -35,6 +35,42 @@ func makeMockSes() *discordgo.Session {
 	return session
 }
 
+func TestRoute_copyRoute(t *testing.T) {
+
+	// initialize route and subroutes
+	subroute := NewSubroute().On("e")
+	route := NewRoute(&testPref{}).On("a", "b").Has(subroute)
+
+	// initialize copied route
+	copiedRoute := copyRoute(*route)
+
+	// all values should be equal
+	if !strSliceEqual(route.aliases, copiedRoute.aliases, false) {
+		t.Errorf("Route and copied route should be equal, but route=%v and copiedRoute=%v", route.aliases, copiedRoute.aliases)
+	}
+
+	copiedRoute.On("c", "d")
+
+	if strSliceEqual(route.aliases, copiedRoute.aliases, false) {
+		t.Errorf("Route and copied route should not be equal, but route=%v and copiedRoute=%v", route.aliases, copiedRoute.aliases)
+	}
+
+	copiedSubroutes, ok := route.GetRoute("e")
+
+	copiedRoute.On("f") // this will modify the original subroute, but not the copy stored in route
+
+	if !ok {
+		t.Fatal("expected at least 1 subroute from GetRoute")
+		return
+	}
+	if strSliceEqual(copiedSubroutes[0].aliases, copiedRoute.aliases, false) {
+		t.Errorf(
+			"Subroute and copied subroute should not be equal, but copiedSubroutes[0]=%v and copiedRoute=%v",
+			copiedSubroutes[0].aliases, copiedRoute.aliases)
+	}
+
+}
+
 // Note: If the message content arg does not match root, it will exit the test case without running any tests!
 func TestRoute_createHandlerFunc(t *testing.T) {
 	type subCase struct {
