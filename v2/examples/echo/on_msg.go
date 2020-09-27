@@ -24,7 +24,3 @@ func (m *OnMsg) Handle(ctx context.Context) error {
 	log.Printf("Message count: %d, args: %v\n", m.totalSent, utils.GetArgs(ctx))
 	return nil
 }
-
-// Resolve catches handler errors
-func (*OnMsg) Resolve(_ context.Context) {
-}
