@@ -57,7 +57,8 @@ func main() {
 	router.Has(echoFmt)
 	router.Has(echoColor)
 
-	router.Has(sayori.NewRoute(nil).Do(&OnMsg{}))
+	router.Has(sayori.NewSubroute().Do(&OnMsg{}))
+	router.HasDefault(onDelete)
 
 	err = router.Open()
 	if err != nil {
